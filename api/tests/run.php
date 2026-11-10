@@ -13,11 +13,13 @@ require dirname(__DIR__) . '/bootstrap.php';
 require __DIR__ . '/TestCase.php';
 
 use Banque\Tests\AssertionFailed;
+use Banque\Tests\TestSkipped;
 use Banque\Tests\TestCase;
 
 $filter = $argv[1] ?? '';
 $passed = 0;
 $failures = [];
+$skipped = [];
 
 foreach (glob(__DIR__ . '/*Test.php') ?: [] as $file) {
     require_once $file;
@@ -34,6 +36,9 @@ foreach (glob(__DIR__ . '/*Test.php') ?: [] as $file) {
             (new $class())->$method();
             $passed++;
             echo '.';
+        } catch (TestSkipped $e) {
+            $skipped[] = $name . ' : ' . $e->getMessage();
+            echo 'S';
         } catch (AssertionFailed $e) {
             $failures[] = $name . "\n      " . $e->getMessage();
             echo 'F';
@@ -45,8 +50,14 @@ foreach (glob(__DIR__ . '/*Test.php') ?: [] as $file) {
 }
 
 echo "\n\n";
+foreach ($skipped as $skip) {
+    echo 'ignoré  ' . $skip . "\n";
+}
+if ($skipped !== []) {
+    echo "\n";
+}
 foreach ($failures as $i => $failure) {
     echo ($i + 1) . ') ' . $failure . "\n\n";
 }
-printf("%d réussi(s), %d échec(s)\n", $passed, count($failures));
+printf("%d réussi(s), %d échec(s), %d ignoré(s)\n", $passed, count($failures), count($skipped));
 exit($failures === [] ? 0 : 1);

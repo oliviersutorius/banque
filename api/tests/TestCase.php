@@ -11,6 +11,10 @@ final class AssertionFailed extends RuntimeException
 {
 }
 
+final class TestSkipped extends RuntimeException
+{
+}
+
 /**
  * Base des tests : chaque méthode publique commençant par « test » est exécutée.
  */
@@ -26,6 +30,11 @@ abstract class TestCase
                 var_export($actual, true),
             ));
         }
+    }
+
+    protected function markSkipped(string $reason): never
+    {
+        throw new TestSkipped($reason);
     }
 
     protected function assertTrue(bool $condition, string $message = 'la condition est fausse'): void
