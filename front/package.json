@@ -11,9 +11,13 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fontsource-variable/dm-sans": "5.3.0",
+    "@fontsource-variable/fraunces": "5.3.0",
+    "@fontsource-variable/nunito": "5.3.0",
+    "@fontsource-variable/quicksand": "5.3.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "6.28.0",
+    "react-router-dom": "6.30.6",
     "recharts": "2.15.0"
   },
   "devDependencies": {
@@ -21,7 +25,7 @@
     "@types/react-dom": "18.3.1",
     "@vitejs/plugin-react": "4.3.4",
     "typescript": "5.6.3",
-    "vite": "5.4.11",
-    "vitest": "2.1.8"
+    "vite": "5.4.21",
+    "vitest": "2.1.9"
   }
 }

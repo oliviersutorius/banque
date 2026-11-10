@@ -6,7 +6,18 @@ export const THEMES: { valeur: Theme; nom: string; description: string; apercu: 
   { valeur: 'nuit', nom: 'Nuit Lavande', description: 'Sombre et douce', apercu: ['#1E1B2E', '#B8A4F4', '#F59EBB', '#86E3C3'] },
 ];
 
-/** Applique la charte graphique à toute la page (variables CSS sur [data-theme]). */
+/** Clé du thème mémorisé dans le navigateur, relue par index.html avant le premier affichage */
+const CLE = 'mes-comptes-theme';
+
+/**
+ * Applique la charte graphique à toute la page (variables CSS sur [data-theme]).
+ * La référence reste parametres.json ; la copie locale évite un flash de la charte par défaut au chargement.
+ */
 export function appliquerTheme(theme: Theme): void {
   document.documentElement.dataset.theme = theme;
+  try {
+    localStorage.setItem(CLE, theme);
+  } catch {
+    // Stockage indisponible (navigation privée…) : sans conséquence
+  }
 }

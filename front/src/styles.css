@@ -1,6 +1,7 @@
-/* Styles de base. Les 3 chartes graphiques complètes arrivent à l'étape 8 ;
-   la charte « Guimauve » sert de valeur par défaut d'ici là. */
+/* Chartes graphiques : toutes les couleurs, polices et formes passent par ces variables.
+   Le thème actif est l'attribut data-theme de <html> (Paramètres → Charte graphique). */
 
+/* Charte 1 — « Guimauve » (pastel, par défaut) */
 :root,
 [data-theme='guimauve'] {
   --bg: #fff8f5;
@@ -8,12 +9,24 @@
   --text: #3d3346;
   --muted: #8a7f91;
   --accent: #f49ac1;
+  --on-accent: #ffffff;
   --depense: #f4a3a8;
   --revenu: #8fd3b6;
+  /* Variantes plus foncées des couleurs dépense/revenu, lisibles en texte */
+  --depense-text: #c7666d;
+  --revenu-text: #3e9c78;
+  --danger: #d9707a;
+  --error-bg: #fff0f1;
+  --error-text: #b54750;
+  --line: rgba(138, 127, 145, 0.18);
   --radius: 20px;
+  --radius-small: 12px;
   --shadow: 0 4px 16px rgba(244, 154, 193, 0.15);
-  --font-title: 'Quicksand', system-ui, sans-serif;
-  --font-text: 'Nunito', system-ui, sans-serif;
+  --border: none;
+  --overlay-shadow: 0 12px 40px rgba(61, 51, 70, 0.18);
+  --backdrop: rgba(61, 51, 70, 0.35);
+  --font-title: 'Quicksand Variable', system-ui, sans-serif;
+  --font-text: 'Nunito Variable', system-ui, sans-serif;
   --uncategorized: #dfe2e7;
   --palette-0: #f4a3a8;
   --palette-1: #f7c59f;
@@ -27,6 +40,87 @@
   --palette-9: #f49ac1;
   --palette-10: #c9b79c;
   --palette-11: #bfc4cc;
+  color-scheme: light;
+}
+
+/* Charte 2 — « Sauge & Lin » (naturel, apaisant) : bordures fines plutôt qu'ombres */
+[data-theme='sauge'] {
+  --bg: #f6f3ec;
+  --card: #fffdf8;
+  --text: #2f3b33;
+  --muted: #7a8478;
+  --accent: #7fa37a;
+  --on-accent: #ffffff;
+  --depense: #c98a6b;
+  --revenu: #7fa37a;
+  --depense-text: #a3613f;
+  --revenu-text: #557a50;
+  --danger: #b5654a;
+  --error-bg: #f8ece4;
+  --error-text: #a3482c;
+  --line: #e6e0d3;
+  --radius: 14px;
+  --radius-small: 10px;
+  --shadow: none;
+  --border: 1px solid #e6e0d3;
+  --overlay-shadow: 0 12px 40px rgba(47, 59, 51, 0.16);
+  --backdrop: rgba(47, 59, 51, 0.3);
+  --font-title: 'Fraunces Variable', Georgia, serif;
+  --font-text: 'DM Sans Variable', system-ui, sans-serif;
+  --uncategorized: #d8d4ca;
+  --palette-0: #7fa37a;
+  --palette-1: #c98a6b;
+  --palette-2: #d9b38c;
+  --palette-3: #8ba9b8;
+  --palette-4: #b5838d;
+  --palette-5: #a3b18a;
+  --palette-6: #e0c097;
+  --palette-7: #6d8b74;
+  --palette-8: #c7a27c;
+  --palette-9: #9e8fb2;
+  --palette-10: #d4a5a5;
+  --palette-11: #a7a9a0;
+  color-scheme: light;
+}
+
+/* Charte 3 — « Nuit Lavande » (sombre, douce) : légère lueur autour des cartes */
+[data-theme='nuit'] {
+  --bg: #1e1b2e;
+  --card: #2a2640;
+  --text: #ece8f7;
+  --muted: #a79fc2;
+  --accent: #b8a4f4;
+  --on-accent: #1e1b2e;
+  --depense: #f59ebb;
+  --revenu: #86e3c3;
+  --depense-text: #f59ebb;
+  --revenu-text: #86e3c3;
+  --danger: #f08a9f;
+  --error-bg: #3d2638;
+  --error-text: #f7a8bb;
+  --line: rgba(167, 159, 194, 0.16);
+  --radius: 18px;
+  --radius-small: 12px;
+  --shadow: 0 0 0 1px rgba(184, 164, 244, 0.12);
+  --border: none;
+  --overlay-shadow: 0 0 0 1px rgba(184, 164, 244, 0.2), 0 16px 48px rgba(0, 0, 0, 0.5);
+  --backdrop: rgba(10, 8, 20, 0.6);
+  --font-title: 'Nunito Variable', system-ui, sans-serif;
+  --font-text: 'Nunito Variable', system-ui, sans-serif;
+  --uncategorized: #6e6a80;
+  --palette-0: #b8a4f4;
+  --palette-1: #f59ebb;
+  --palette-2: #86e3c3;
+  --palette-3: #ffd38a;
+  --palette-4: #8cc8ff;
+  --palette-5: #ffab91;
+  --palette-6: #c5e68a;
+  --palette-7: #e4a6f2;
+  --palette-8: #7fdbda;
+  --palette-9: #f7e08a;
+  --palette-10: #a0a8c8;
+  --palette-11: #d9b8a0;
+  color-scheme: dark;
 }
 
 * {
@@ -117,6 +211,7 @@ h3 {
 
 .card {
   background: var(--card);
+  border: var(--border);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 24px;
@@ -165,19 +260,19 @@ h3 {
 }
 
 .depense {
-  color: var(--depense-text, #c7666d);
+  color: var(--depense-text);
 }
 
 .revenu {
-  color: var(--revenu-text, #3e9c78);
+  color: var(--revenu-text);
 }
 
 .error {
-  color: #b54750;
+  color: var(--error-text);
 }
 
 .card.error {
-  background: #fff0f1;
+  background: var(--error-bg);
 }
 
 .plain {
@@ -194,7 +289,7 @@ h3 {
   border-radius: 999px;
   padding: 10px 20px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   cursor: pointer;
 }
 
@@ -252,7 +347,7 @@ h3 {
 
 .table td {
   padding: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--muted) 18%, transparent);
+  border-top: 1px solid var(--line);
   vertical-align: middle;
 }
 
@@ -273,7 +368,7 @@ h3 {
   font: inherit;
   max-width: 260px;
   padding: 6px 10px;
-  border-radius: 12px;
+  border-radius: var(--radius-small);
   border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
   background: var(--card);
   color: var(--text);
@@ -359,11 +454,11 @@ h3 {
   padding: 24px;
   background: var(--card);
   color: var(--text);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  box-shadow: var(--overlay-shadow);
 }
 
 .dialog::backdrop {
-  background: rgba(61, 51, 70, 0.35);
+  background: var(--backdrop);
 }
 
 .dialog h2 {
@@ -380,7 +475,7 @@ h3 {
 .field input {
   font: inherit;
   padding: 10px 14px;
-  border-radius: 12px;
+  border-radius: var(--radius-small);
   border: 1px solid color-mix(in srgb, var(--muted) 35%, transparent);
   background: var(--bg);
   color: var(--text);
@@ -475,7 +570,7 @@ h3 {
 .cheer {
   margin: -4px 0 0;
   text-align: center;
-  color: var(--revenu-text, #3e9c78);
+  color: var(--revenu-text);
 }
 
 .blocks {
@@ -530,10 +625,10 @@ h3 {
   flex-direction: column;
   gap: 2px;
   padding: 8px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-small);
   background: var(--card);
   color: var(--text);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--overlay-shadow);
   font-size: 0.85rem;
 }
 
@@ -755,13 +850,14 @@ h3 {
   right: 0;
   z-index: 1;
   background: var(--card);
-  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.12);
+  box-shadow: -8px 0 8px -8px var(--line);
 }
 
 /* --- Catégories, règles, paramètres --- */
 
 .btn.danger {
-  background: #d9707a;
+  background: var(--danger);
+  color: #fff;
 }
 
 .icon-btn {
@@ -801,7 +897,7 @@ h3 {
 
 .cat-list > li {
   padding: 12px 0;
-  border-top: 1px solid color-mix(in srgb, var(--muted) 18%, transparent);
+  border-top: 1px solid var(--line);
 }
 
 .cat-row {
@@ -973,11 +1069,80 @@ h3 {
 .swatches {
   display: flex;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--radius-small);
   overflow: hidden;
   margin-bottom: 6px;
 }
 
 .swatches span {
   flex: 1;
+}
+
+/* « Sauge & Lin » n'a pas d'ombres : les éléments en relief reçoivent une bordure fine */
+[data-theme='sauge'] .nav-link.active,
+[data-theme='sauge'] .switch button.active,
+[data-theme='sauge'] .period-select,
+[data-theme='sauge'] .actions-bar {
+  box-shadow: 0 0 0 1px var(--line);
+}
+
+/* --- Finitions responsive --- */
+
+@media (max-width: 720px) {
+  .topbar {
+    gap: 8px;
+    padding-top: 12px;
+    padding-bottom: 8px;
+  }
+
+  /* Navigation sur une ligne, défilable au doigt */
+  .nav {
+    order: 3;
+    flex: 1 0 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+    margin: 0 -16px;
+    padding: 4px 16px;
+  }
+
+  .nav-link {
+    white-space: nowrap;
+  }
+
+  .status {
+    margin-left: auto;
+  }
+
+  .card {
+    padding: 18px 16px;
+  }
+
+  .summary {
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .stat strong {
+    font-size: 1.2rem;
+  }
+
+  .actions-bar {
+    border-radius: var(--radius);
+  }
+}
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.5rem;
+  }
+
+  .period-select {
+    font-size: 1.1rem;
+  }
+
+  /* Tableaux de lignes : le libellé garde une largeur lisible, le tableau défile horizontalement */
+  .table td.libelle {
+    min-width: 140px;
+  }
 }

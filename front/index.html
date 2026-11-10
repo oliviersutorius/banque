@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🐷</text></svg>" />
     <title>Mes Comptes</title>
+    <script>
+      // Dernière charte utilisée, appliquée avant le premier affichage (voir src/theme.ts)
+      try {
+        var theme = localStorage.getItem('mes-comptes-theme');
+        if (theme) document.documentElement.dataset.theme = theme;
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

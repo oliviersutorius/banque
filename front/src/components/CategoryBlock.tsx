@@ -61,6 +61,8 @@ export default function CategoryBlock({ titre, sens, parts, categories, affichag
     fill: couleur(categories, sens, p.nom),
   }));
   const total = parts.reduce((s, p) => s + p.cents, 0);
+  // Sur un petit écran, les noms de catégories laissent plus de place aux barres
+  const largeurNoms = window.matchMedia('(max-width: 480px)').matches ? 120 : 170;
 
   return (
     <section className="card block">
@@ -91,7 +93,7 @@ export default function CategoryBlock({ titre, sens, parts, categories, affichag
           <ResponsiveContainer width="100%" height={Math.max(120, donnees.length * 40)}>
             <BarChart data={donnees} layout="vertical" margin={{ left: 8, right: 16 }}>
               <XAxis type="number" hide />
-              <YAxis type="category" dataKey="libelle" width={170} tickLine={false} axisLine={false} tick={{ fontSize: 13 }} />
+              <YAxis type="category" dataKey="libelle" width={largeurNoms} tickLine={false} axisLine={false} tick={{ fontSize: 13, fill: 'var(--text)' }} />
               <Tooltip content={<Infobulle />} cursor={{ fill: 'var(--bg)' }} />
               <Bar dataKey="cents" radius={[0, 10, 10, 0]} barSize={22} animationDuration={700} onClick={(d: Donnee) => onSelect(d.nom)} className="clickable">
                 {donnees.map((d) => (
