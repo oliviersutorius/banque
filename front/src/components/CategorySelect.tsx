@@ -7,15 +7,19 @@ interface Props {
   value: Categorie;
   onChange: (categorie: Categorie) => void;
   disabled?: boolean;
+  autoFocus?: boolean;
+  onBlur?: () => void;
 }
 
 /** Liste déroulante des catégories existantes : 2 niveaux pour une dépense, 1 pour un revenu. */
-export default function CategorySelect({ categories, sens, value, onChange, disabled }: Props) {
+export default function CategorySelect({ categories, sens, value, onChange, disabled, autoFocus, onBlur }: Props) {
   return (
     <select
       className="category-select"
       value={versOption(value)}
       disabled={disabled}
+      autoFocus={autoFocus}
+      onBlur={onBlur}
       onChange={(e) => onChange(depuisOption(e.target.value, sens))}
     >
       {sens === 'dépense'

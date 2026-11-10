@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { confirmImport, getCategories, previewImport } from '../api';
-import { categorie1, estACategoriser, icone, memeCategorie } from '../categories';
-import CategorySelect from '../components/CategorySelect';
+import { estACategoriser, memeCategorie } from '../categories';
+import CategoryPicker from '../components/CategoryPicker';
 import LearnDialog from '../components/LearnDialog';
 import { formatEuros, toCents } from '../format';
 import { lignesAEnvoyer, ordonnerLignes, totauxNouvelles } from '../importLogic';
@@ -246,10 +246,7 @@ export default function ImportPage() {
                               )}
                             </td>
                             <td>
-                              <span className="cat-icon" aria-hidden="true">
-                                {icone(categories, l.sens, categorie1(cat))}
-                              </span>
-                              <CategorySelect
+                              <CategoryPicker
                                 categories={categories}
                                 sens={l.sens}
                                 value={cat}
@@ -286,6 +283,7 @@ export default function ImportPage() {
         <LearnDialog
           ligne={{ ...enCours.ligne, catégorie: enCours.catégorie }}
           lot={candidates.map((l) => ({ libelle: l.libelle, sens: l.sens }))}
+          contexteLot="de cet import"
           proposerMois
           onClose={finApprentissage}
         />

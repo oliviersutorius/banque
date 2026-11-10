@@ -25,6 +25,11 @@ export interface FichierMois {
   lignes: LigneMois[];
 }
 
+/** Réponse de GET /api/mois/{YYYYMM} : le fichier du mois et, pour chaque ligne, son libellé analysé */
+export interface MoisApi extends FichierMois {
+  analyse: { type_operation: string; marchand: string }[];
+}
+
 /** data/categories.json */
 export interface Categories {
   dépenses: { nom: string; icone: string; sous_catégories: string[] }[];

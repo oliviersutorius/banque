@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { getSante, type Sante } from './api';
 import ImportPage from './pages/ImportPage';
+import MonthPage from './pages/MonthPage';
 import Placeholder from './pages/Placeholder';
 
 const NAV = [
@@ -39,7 +40,7 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<Navigate to="/mois" replace />} />
-          <Route path="/mois/:mois?" element={<Placeholder title="Vue mensuelle" step={5} />} />
+          <Route path="/mois/:mois?" element={<MonthPage />} />
           <Route path="/annee" element={<Placeholder title="Récapitulatif annuel" step={6} />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/categories" element={<Placeholder title="Catégories" step={7} />} />

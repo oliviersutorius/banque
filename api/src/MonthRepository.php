@@ -73,6 +73,39 @@ final class MonthRepository
     }
 
     /**
+     * Change la catégorie de lignes d'un mois, désignées par leur index.
+     *
+     * Chaque cible porte la date et le libellé affichés : s'ils ne correspondent plus à la ligne de cet
+     * index (le mois a été modifié entre-temps), rien n'est écrit.
+     *
+     * @param list<array{index: int, date: string, libelle: string}> $targets
+     * @param string|array{catégorie1: string, catégorie2: string} $category déjà validée pour le sens
+     * @return list<array<string, mixed>> les lignes du mois après modification
+     * @throws LineConflictException
+     * @throws InvalidArgumentException si une ligne n'existe pas ou n'a pas le sens attendu
+     */
+    public function recategorize(string $month, array $targets, string|array $category, Direction $direction): array
+    {
+        $lines = $this->lines($month);
+        foreach ($targets as $target) {
+            $line = $lines[$target['index']] ?? null;
+            if ($line === null) {
+                throw new InvalidArgumentException('Ligne ' . $target['index'] . ' introuvable dans ' . $month);
+            }
+            if ($line['date'] !== $target['date'] || $line['libelle'] !== $target['libelle']) {
+                throw new LineConflictException('La ligne ' . $target['index'] . ' a changé : recharge le mois');
+            }
+            if (MonthLine::direction($line) !== $direction) {
+                throw new InvalidArgumentException('Ligne ' . $target['index'] . ' : sens différent de la catégorie choisie');
+            }
+            $lines[$target['index']]['catégorie'] = $category;
+        }
+        $this->save($month, $lines);
+
+        return $this->lines($month);
+    }
+
+    /**
      * Applique une règle aux lignes encore « À catégoriser » de tous les mois enregistrés.
      *
      * @return int nombre de lignes mises à jour

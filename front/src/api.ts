@@ -3,7 +3,9 @@
 import type {
   ApercuImport,
   Categories,
+  Categorie,
   LigneAImporter,
+  MoisApi,
   Regle,
   RegleSaisie,
   ResultatApprentissage,
@@ -45,6 +47,22 @@ export interface Sante {
 export const getSante = () => api<Sante>('/sante');
 export const getCategories = () => api<Categories>('/categories');
 export const getRegles = () => api<Regle[]>('/regles');
+
+export const getMoisDisponibles = () => api<string[]>('/mois');
+export const getMois = (mois: string) => api<MoisApi>(`/mois/${mois}`);
+
+export interface LigneVisee {
+  index: number;
+  date: string;
+  libelle: string;
+}
+
+/** Recatégorise une ligne et, en une seule écriture, les lignes similaires du même mois. */
+export const recategoriser = (mois: string, ligne: LigneVisee, catégorie: Categorie, autres: LigneVisee[] = []) =>
+  api<MoisApi>(`/mois/${mois}/lignes/${ligne.index}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ date: ligne.date, libelle: ligne.libelle, catégorie, autres }),
+  });
 
 export function previewImport(fichier: File): Promise<ApercuImport> {
   const form = new FormData();

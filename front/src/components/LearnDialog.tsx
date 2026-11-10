@@ -15,6 +15,8 @@ interface Props {
   ligne: LigneCorrigee;
   /** Lignes du lot en cours parmi lesquelles chercher les lignes similaires */
   lot: { libelle: string; sens: Sens }[];
+  /** Désignation du lot dans la fenêtre : « de cet import », « de ce mois »… */
+  contexteLot: string;
   /** Propose d'appliquer la règle aux mois déjà enregistrés encore « À catégoriser » */
   proposerMois: boolean;
   onClose: (resultat: { similaires: number[]; message?: string }) => void;
@@ -33,7 +35,7 @@ const LIBELLES_TYPES: Record<string, string> = {
 /**
  * Apprentissage après une correction : créer une règle et l'appliquer aux lignes similaires.
  */
-export default function LearnDialog({ ligne, lot, proposerMois, onClose }: Props) {
+export default function LearnDialog({ ligne, lot, contexteLot, proposerMois, onClose }: Props) {
   const [motif, setMotif] = useState(ligne.marchand);
   const [creerRegle, setCreerRegle] = useState(true);
   const [limiterType, setLimiterType] = useState(false);
@@ -115,7 +117,7 @@ export default function LearnDialog({ ligne, lot, proposerMois, onClose }: Props
       )}
       <label className="check">
         <input type="checkbox" checked={appliquerLot} onChange={(e) => setAppliquerLot(e.target.checked)} />
-        Appliquer aux lignes similaires de cet import ({similaires.length})
+        Appliquer aux lignes similaires {contexteLot} ({similaires.length})
       </label>
       {proposerMois && (
         <label className="check">
