@@ -1,0 +1,11 @@
+/nbproject/private/
+
+# Données bancaires personnelles : jamais versionnées
+/data/
+/csv/
+/exemple.csv
+
+# Front
+/front/node_modules/
+/front/dist/
+*.tsbuildinfo

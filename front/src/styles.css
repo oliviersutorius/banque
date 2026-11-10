@@ -1,0 +1,127 @@
+/* Styles de base. Les 3 chartes graphiques complètes arrivent à l'étape 8 ;
+   la charte « Guimauve » sert de valeur par défaut d'ici là. */
+
+:root,
+[data-theme='guimauve'] {
+  --bg: #fff8f5;
+  --card: #ffffff;
+  --text: #3d3346;
+  --muted: #8a7f91;
+  --accent: #f49ac1;
+  --depense: #f4a3a8;
+  --revenu: #8fd3b6;
+  --radius: 20px;
+  --shadow: 0 4px 16px rgba(244, 154, 193, 0.15);
+  --font-title: 'Quicksand', system-ui, sans-serif;
+  --font-text: 'Nunito', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-text);
+  font-variant-numeric: tabular-nums;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-title);
+}
+
+.app {
+  min-height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 16px 24px;
+}
+
+.brand {
+  font-family: var(--font-title);
+  font-weight: 700;
+  font-size: 1.25rem;
+}
+
+.nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.nav-link {
+  padding: 8px 14px;
+  border-radius: 999px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  background: var(--card);
+}
+
+.nav-link.active {
+  background: var(--card);
+  box-shadow: var(--shadow);
+  color: var(--accent);
+  font-weight: 700;
+}
+
+.status {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status.ok::before,
+.status.ko::before {
+  content: '●';
+  margin-right: 6px;
+}
+
+.status.ok::before {
+  color: var(--revenu);
+}
+
+.status.ko::before {
+  color: var(--depense);
+}
+
+.content {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 24px 48px;
+}
+
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 24px;
+}
+
+.empty {
+  text-align: center;
+  padding: 64px 24px;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+@media (max-width: 640px) {
+  .topbar,
+  .content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
