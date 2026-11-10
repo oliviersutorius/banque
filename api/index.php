@@ -9,17 +9,16 @@ declare(strict_types=1);
 require __DIR__ . '/bootstrap.php';
 
 use Banque\HttpException;
+use Banque\JsonFile;
 use Banque\Router;
 use Banque\Storage;
-
-const JSON_FLAGS = JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES;
 
 function sendJson(int $status, mixed $body): void
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
     header('Cache-Control: no-store');
-    echo json_encode($body, JSON_FLAGS | JSON_THROW_ON_ERROR);
+    echo json_encode($body, JsonFile::FLAGS | JSON_THROW_ON_ERROR);
 }
 
 /**
@@ -33,6 +32,7 @@ function notImplemented(string $step): callable
 }
 
 $storage = new Storage(dirname(__DIR__) . '/data');
+$json = new JsonFile($storage->backupsDir());
 $router = new Router();
 
 $router->add('GET', '/api/sante', static fn (): array => [
@@ -52,9 +52,9 @@ $router->add('PATCH', '/api/mois/{mois:\d{6}}/lignes/{index:\d+}', notImplemente
 $router->add('GET', '/api/annee/{annee:\d{4}}', notImplemented('étape 6'));
 
 // Étape 7 : catégories, règles, paramètres
-$router->add('GET', '/api/categories', notImplemented('étape 7'));
+$router->add('GET', '/api/categories', static fn (): array => $json->read($storage->categoriesFile()));
 $router->add('PUT', '/api/categories', notImplemented('étape 7'));
-$router->add('GET', '/api/regles', notImplemented('étape 7'));
+$router->add('GET', '/api/regles', static fn (): array => $json->read($storage->rulesFile()));
 $router->add('POST', '/api/regles', notImplemented('étape 7'));
 $router->add('PUT', '/api/regles/{index:\d+}', notImplemented('étape 7'));
 $router->add('DELETE', '/api/regles/{index:\d+}', notImplemented('étape 7'));
@@ -63,6 +63,7 @@ $router->add('PUT', '/api/parametres', notImplemented('étape 7'));
 
 try {
     $storage->ensureDirectories();
+    $storage->initializeDefaults($json);
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
     $result = $router->dispatch($_SERVER['REQUEST_METHOD'] ?? 'GET', is_string($path) ? rtrim($path, '/') : '');
     sendJson(200, $result);

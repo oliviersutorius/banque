@@ -24,6 +24,16 @@ final class Storage
         }
     }
 
+    /**
+     * Crée categories.json, regles.json et parametres.json avec leur contenu initial s'ils n'existent pas.
+     */
+    public function initializeDefaults(JsonFile $json): void
+    {
+        $json->initialize($this->categoriesFile(), DefaultData::categories());
+        $json->initialize($this->rulesFile(), DefaultData::rules());
+        $json->initialize($this->settingsFile(), DefaultData::settings());
+    }
+
     public function root(): string
     {
         return $this->root;
