@@ -1,6 +1,7 @@
 /** Client HTTP de l'API PHP. Toutes les routes sont sous /api. */
 
 import type {
+  AnneeApi,
   ApercuImport,
   Categories,
   Categorie,
@@ -50,6 +51,7 @@ export const getRegles = () => api<Regle[]>('/regles');
 
 export const getMoisDisponibles = () => api<string[]>('/mois');
 export const getMois = (mois: string) => api<MoisApi>(`/mois/${mois}`);
+export const getAnnee = (annee: string) => api<AnneeApi>(`/annee/${annee}`);
 
 export interface LigneVisee {
   index: number;

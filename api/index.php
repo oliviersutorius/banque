@@ -150,7 +150,14 @@ $router->add('PATCH', '/api/mois/{mois:\d{6}}/lignes/{index:\d+}', static functi
     return monthResponse($p['mois'], $months->recategorize($p['mois'], $targets, $category, $direction), $normalizer);
 });
 
-$router->add('GET', '/api/annee/{annee:\d{4}}', notImplemented('étape 6'));
+// Les mois enregistrés d'une année ; l'agrégation se fait côté front
+$router->add('GET', '/api/annee/{annee:\d{4}}', static fn (array $p): array => [
+    'année' => $p['annee'],
+    'mois' => array_map(
+        static fn (string $m): array => monthResponse($m, $months->lines($m), $normalizer),
+        array_values(array_filter($months->months(), static fn (string $m): bool => str_starts_with($m, $p['annee']))),
+    ),
+]);
 
 $router->add('GET', '/api/categories', static fn (): array => $json->read($storage->categoriesFile()));
 $router->add('PUT', '/api/categories', notImplemented('étape 7'));

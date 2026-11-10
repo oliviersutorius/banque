@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chronologique, parCategorie1, parCategorie2, totaux, versLignesVue } from './aggregate';
+import { chronologique, matrice, parCategorie1, parCategorie2, totaux, versLignesVue } from './aggregate';
 import type { MoisApi } from './types';
 
 const mois: MoisApi = {
@@ -57,5 +57,44 @@ describe('parCategorie2', () => {
 describe('chronologique', () => {
   it("trie par date en conservant l'ordre du fichier à date égale", () => {
     expect(chronologique(lignes).map((l) => l.index)).toEqual([4, 6, 1, 2, 3, 0, 5]);
+  });
+});
+
+describe('matrice', () => {
+  const juillet: MoisApi = {
+    mois: '202507',
+    lignes: [
+      { date: '02/07/2025', libelle: 'CNP', catégorie: { catégorie1: 'Banque & assurances', catégorie2: 'Assurance emprunteur' }, dépense: '65,64' },
+      { date: '08/07/2025', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '10,00' },
+      { date: '10/07/2025', libelle: 'MUTUELLE', catégorie: 'Remboursements santé', revenu: '50,00' },
+    ],
+    analyse: [],
+  };
+  const aout: MoisApi = {
+    mois: '202508',
+    lignes: [{ date: '03/08/2025', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '90,00' }],
+    analyse: [],
+  };
+  const lignesAnnee = [...versLignesVue(juillet), ...versLignesVue(aout), ...lignes];
+  const enregistres = new Set(['202507', '202508', '202509']);
+
+  it('répartit par catégorie et par mois, null pour un mois sans fichier', () => {
+    const m = matrice(lignesAnnee, 'dépense', '2025', enregistres);
+
+    expect(m.lignes.map((l) => [l.nom, l.total])).toEqual([
+      ['Alimentation', 10000],
+      ['Banque & assurances', 6564],
+    ]);
+    const alimentation = m.lignes[0]?.parMois ?? [];
+    expect(alimentation.slice(5, 10)).toEqual([null, 1000, 9000, 0, null]);
+    expect(m.totauxMois.slice(5, 10)).toEqual([null, 7564, 9000, 0, null]);
+    expect(m.total).toBe(16564);
+  });
+
+  it("ignore les lignes d'une autre année et de l'autre sens", () => {
+    const m = matrice(lignesAnnee, 'revenu', '2025', enregistres);
+
+    expect(m.lignes.map((l) => l.nom)).toEqual(['Remboursements santé']);
+    expect(m.total).toBe(5000);
   });
 });

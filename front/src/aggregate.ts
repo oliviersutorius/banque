@@ -94,3 +94,47 @@ const dateTriable = (date: string) => date.slice(6, 10) + date.slice(3, 5) + dat
 export function chronologique(lignes: LigneVue[]): LigneVue[] {
   return [...lignes].sort((a, b) => dateTriable(a.date).localeCompare(dateTriable(b.date)) || a.mois.localeCompare(b.mois) || a.index - b.index);
 }
+
+export interface LigneMatrice {
+  nom: string;
+  /** Montant par mois de janvier à décembre ; null si le mois n'a pas de fichier */
+  parMois: (number | null)[];
+  total: number;
+}
+
+export interface Matrice {
+  lignes: LigneMatrice[];
+  /** Total de chaque mois ; null si le mois n'a pas de fichier */
+  totauxMois: (number | null)[];
+  total: number;
+}
+
+/**
+ * Matrice catégories 1 (lignes) × mois de janvier à décembre (colonnes) pour une année et un sens.
+ * Les catégories sont triées par total décroissant.
+ */
+export function matrice(lignes: LigneVue[], sens: Sens, annee: string, moisEnregistres: ReadonlySet<string>): Matrice {
+  const colonnes = Array.from({ length: 12 }, (_, i) => `${annee}${String(i + 1).padStart(2, '0')}`);
+  const vide = (): (number | null)[] => colonnes.map((m) => (moisEnregistres.has(m) ? 0 : null));
+
+  const parCategorie = new Map<string, (number | null)[]>();
+  const totauxMois = vide();
+  for (const l of lignes) {
+    const col = colonnes.indexOf(l.mois);
+    if (l.sens !== sens || col < 0) continue;
+    const nom = categorie1(l.catégorie);
+    const ligne = parCategorie.get(nom) ?? vide();
+    ligne[col] = (ligne[col] ?? 0) + l.cents;
+    parCategorie.set(nom, ligne);
+    totauxMois[col] = (totauxMois[col] ?? 0) + l.cents;
+  }
+
+  const somme = (valeurs: (number | null)[]) => valeurs.reduce<number>((s, v) => s + (v ?? 0), 0);
+  return {
+    lignes: [...parCategorie.entries()]
+      .map(([nom, parMois]) => ({ nom, parMois, total: somme(parMois) }))
+      .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr')),
+    totauxMois,
+    total: somme(totauxMois),
+  };
+}

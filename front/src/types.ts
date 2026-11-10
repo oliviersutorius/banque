@@ -30,6 +30,12 @@ export interface MoisApi extends FichierMois {
   analyse: { type_operation: string; marchand: string }[];
 }
 
+/** Réponse de GET /api/annee/{YYYY} : les mois enregistrés de l'année */
+export interface AnneeApi {
+  année: string;
+  mois: MoisApi[];
+}
+
 /** data/categories.json */
 export interface Categories {
   dépenses: { nom: string; icone: string; sous_catégories: string[] }[];

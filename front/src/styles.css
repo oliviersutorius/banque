@@ -14,7 +14,7 @@
   --shadow: 0 4px 16px rgba(244, 154, 193, 0.15);
   --font-title: 'Quicksand', system-ui, sans-serif;
   --font-text: 'Nunito', system-ui, sans-serif;
-  --uncategorized: #bfc4cc;
+  --uncategorized: #dfe2e7;
   --palette-0: #f4a3a8;
   --palette-1: #f7c59f;
   --palette-2: #f9e79f;
@@ -705,4 +705,55 @@ h3 {
 
 .category-pill:disabled {
   cursor: default;
+}
+
+/* --- Récapitulatif annuel --- */
+
+.center {
+  text-align: center;
+  margin: -8px 0 0;
+}
+
+.blocks.wide {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.matrix {
+  font-size: 0.88rem;
+}
+
+.matrix th a {
+  color: inherit;
+}
+
+.matrix td,
+.matrix th {
+  white-space: nowrap;
+}
+
+/* Première colonne fixe pendant le défilement horizontal */
+.matrix th:first-child,
+.matrix td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--card);
+}
+
+.matrix tbody tr:hover td {
+  background: var(--bg);
+}
+
+.matrix .total {
+  font-weight: 700;
+}
+
+/* Colonne « Total » fixe à droite */
+.matrix th:last-child,
+.matrix td:last-child {
+  position: sticky;
+  right: 0;
+  z-index: 1;
+  background: var(--card);
+  box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.12);
 }

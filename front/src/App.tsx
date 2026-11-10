@@ -3,6 +3,7 @@ import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import { getSante, type Sante } from './api';
 import ImportPage from './pages/ImportPage';
 import MonthPage from './pages/MonthPage';
+import YearPage from './pages/YearPage';
 import Placeholder from './pages/Placeholder';
 
 const NAV = [
@@ -41,7 +42,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Navigate to="/mois" replace />} />
           <Route path="/mois/:mois?" element={<MonthPage />} />
-          <Route path="/annee" element={<Placeholder title="Récapitulatif annuel" step={6} />} />
+          <Route path="/annee/:annee?" element={<YearPage />} />
           <Route path="/import" element={<ImportPage />} />
           <Route path="/categories" element={<Placeholder title="Catégories" step={7} />} />
           <Route path="/regles" element={<Placeholder title="Règles" step={7} />} />
