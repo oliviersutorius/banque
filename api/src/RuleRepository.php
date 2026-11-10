@@ -41,29 +41,82 @@ final class RuleRepository
      */
     public static function learnedFromInput(array $input, CategoryCatalog $catalog): Rule
     {
-        $rule = Rule::fromArray(['origine' => Rule::ORIGIN_LEARNED, 'a_confirmer' => false] + $input);
+        return self::fromInput(['a_confirmer' => false] + $input, $catalog, Rule::ORIGIN_LEARNED);
+    }
+
+    /**
+     * Construit une règle à partir d'une saisie, avec l'origine imposée, et vérifie sa catégorie.
+     *
+     * @param array<mixed> $input { motif, type, catégorie1 + catégorie2 | catégorie, et?, type_operation?, a_confirmer? }
+     * @throws InvalidArgumentException
+     */
+    public static function fromInput(array $input, CategoryCatalog $catalog, string $origin): Rule
+    {
+        $rule = Rule::fromArray(['origine' => $origin] + $input);
         $exists = $rule->direction === Direction::Expense
             ? $catalog->hasExpense($rule->category1, (string) $rule->category2)
             : $catalog->hasIncome($rule->category1);
         if (!$exists) {
             throw new InvalidArgumentException('La catégorie de la règle n\'existe pas');
         }
-        if (mb_strlen($rule->motif) > 200) {
+        if (mb_strlen($rule->motif) > 200 || count($rule->and) > 5) {
             throw new InvalidArgumentException('Motif trop long');
         }
         if ($rule->operationType !== null && !in_array($rule->operationType, LabelNormalizer::typeCodes(), true)) {
             throw new InvalidArgumentException('Type d\'opération inconnu : ' . $rule->operationType);
         }
+        $and = array_values(array_filter($rule->and, static fn (string $m): bool => Text::canonical($m) !== ''));
 
         return new Rule(
             $rule->motif,
             $rule->direction,
             $rule->category1,
             $rule->category2,
-            Rule::ORIGIN_LEARNED,
-            $rule->and,
+            $origin,
+            $and,
             $rule->operationType,
+            $rule->toConfirm,
         );
+    }
+
+    /**
+     * Remplace la règle d'un index, en gardant son origine.
+     *
+     * @param array<mixed> $input
+     * @throws LineConflictException si la règle de cet index n'a plus le motif attendu
+     */
+    public function update(int $index, string $expectedMotif, array $input, CategoryCatalog $catalog): Rule
+    {
+        $rules = $this->all();
+        $current = $this->at($rules, $index, $expectedMotif);
+        $rules[$index] = self::fromInput($input, $catalog, $current->origin);
+        $this->saveAll($rules);
+
+        return $rules[$index];
+    }
+
+    /**
+     * @throws LineConflictException si la règle de cet index n'a plus le motif attendu
+     */
+    public function delete(int $index, string $expectedMotif): void
+    {
+        $rules = $this->all();
+        $this->at($rules, $index, $expectedMotif);
+        array_splice($rules, $index, 1);
+        $this->saveAll($rules);
+    }
+
+    /**
+     * @param list<Rule> $rules
+     */
+    private function at(array $rules, int $index, string $expectedMotif): Rule
+    {
+        $rule = $rules[$index] ?? throw new InvalidArgumentException('Règle introuvable : ' . $index);
+        if ($rule->motif !== $expectedMotif) {
+            throw new LineConflictException('Les règles ont changé : recharge la page');
+        }
+
+        return $rule;
     }
 
     /**

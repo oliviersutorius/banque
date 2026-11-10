@@ -12,6 +12,7 @@ import type {
   ResultatApprentissage,
   ResultatImport,
   Sens,
+  Theme,
 } from './types';
 
 export class ApiError extends Error {
@@ -79,3 +80,51 @@ export const apprendreRegle = (règle: RegleSaisie, appliquer_aux_mois: boolean)
 
 export const correspondances = (règle: RegleSaisie, lignes: { libelle: string; sens: Sens }[]) =>
   post<{ correspondances: boolean[] }>('/regles/correspondances', { règle, lignes });
+
+// --- Catégories ---
+
+export type ActionCategorie =
+  | { action: 'ajouter'; sens: Sens; chemin: string[]; icone?: string; sous_catégorie?: string }
+  | { action: 'icone'; sens: Sens; chemin: string[]; icone: string }
+  | { action: 'renommer'; sens: Sens; chemin: string[]; nom: string }
+  | { action: 'supprimer'; sens: Sens; chemin: string[]; remplacement?: string[] };
+
+export interface Usage {
+  lignes: number;
+  règles: number;
+}
+
+export const modifierCategories = (action: ActionCategorie) =>
+  api<{ catégories: Categories; modifiés: Usage }>('/categories', { method: 'PUT', body: JSON.stringify(action) });
+
+export const usageCategorie = (sens: Sens, chemin: string[]) => post<Usage>('/categories/usage', { sens, chemin });
+
+// --- Règles ---
+
+export interface ResultatTest {
+  type_operation: string;
+  marchand: string;
+  texte: string;
+  catégorie: Categorie;
+  source: 'règle' | 'type' | 'aucune';
+  règle: (Regle & { index: number }) | null;
+}
+
+export const testerLibelle = (libelle: string, sens: Sens) => post<ResultatTest>('/regles/tester', { libelle, sens });
+
+export const creerRegle = (règle: RegleSaisie) => apprendreRegle(règle, false);
+
+export const modifierRegle = (index: number, motifActuel: string, règle: RegleSaisie) =>
+  api<Regle>(`/regles/${index}`, { method: 'PUT', body: JSON.stringify({ motif_actuel: motifActuel, règle }) });
+
+export const supprimerRegle = (index: number, motif: string) =>
+  api<{ supprimée: boolean }>(`/regles/${index}?motif=${encodeURIComponent(motif)}`, { method: 'DELETE' });
+
+// --- Paramètres ---
+
+export interface Parametres {
+  thème: Theme;
+}
+
+export const getParametres = () => api<Parametres>('/parametres');
+export const putParametres = (p: Parametres) => api<Parametres>('/parametres', { method: 'PUT', body: JSON.stringify(p) });

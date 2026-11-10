@@ -12,6 +12,7 @@ final class DefaultData
 {
     public const UNCATEGORIZED = 'À catégoriser';
     public const UNCATEGORIZED_SUB = 'Non classé';
+    public const THEMES = ['guimauve', 'sauge', 'nuit'];
 
     /**
      * @return array{dépenses: list<array{nom: string, icone: string, sous_catégories: list<string>}>, revenus: list<array{nom: string, icone: string}>}

@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
-import { getSante, type Sante } from './api';
+import { getParametres, getSante, type Sante } from './api';
+import CategoriesPage from './pages/CategoriesPage';
 import ImportPage from './pages/ImportPage';
 import MonthPage from './pages/MonthPage';
+import RulesPage from './pages/RulesPage';
+import SettingsPage from './pages/SettingsPage';
 import YearPage from './pages/YearPage';
-import Placeholder from './pages/Placeholder';
+import { appliquerTheme } from './theme';
 
 const NAV = [
   { to: '/mois', label: 'Mois', icon: '📅' },
@@ -21,6 +24,7 @@ export default function App() {
 
   useEffect(() => {
     getSante().then(setSante, (e: Error) => setErreur(e.message));
+    getParametres().then((p) => appliquerTheme(p.thème), () => undefined);
   }, []);
 
   return (
@@ -44,9 +48,9 @@ export default function App() {
           <Route path="/mois/:mois?" element={<MonthPage />} />
           <Route path="/annee/:annee?" element={<YearPage />} />
           <Route path="/import" element={<ImportPage />} />
-          <Route path="/categories" element={<Placeholder title="Catégories" step={7} />} />
-          <Route path="/regles" element={<Placeholder title="Règles" step={7} />} />
-          <Route path="/parametres" element={<Placeholder title="Paramètres" step={7} />} />
+          <Route path="/categories" element={<CategoriesPage />} />
+          <Route path="/regles" element={<RulesPage />} />
+          <Route path="/parametres" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/mois" replace />} />
         </Routes>
       </main>

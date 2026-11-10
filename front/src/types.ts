@@ -2,6 +2,8 @@
 
 export type Sens = 'dépense' | 'revenu';
 
+export type Theme = 'guimauve' | 'sauge' | 'nuit';
+
 export interface CategorieDepense {
   catégorie1: string;
   catégorie2: string;
@@ -55,7 +57,7 @@ export interface Regle {
   origine: 'initiale' | 'apprise';
 }
 
-export type RegleSaisie = Omit<Regle, 'origine' | 'a_confirmer'>;
+export type RegleSaisie = Omit<Regle, 'origine'>;
 
 // --- Import ---
 

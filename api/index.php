@@ -9,9 +9,11 @@ declare(strict_types=1);
 require __DIR__ . '/bootstrap.php';
 
 use Banque\CategoryCatalog;
+use Banque\CategoryManager;
 use Banque\Categorizer;
 use Banque\CsvFormatException;
 use Banque\CsvParser;
+use Banque\DefaultData;
 use Banque\Direction;
 use Banque\HttpException;
 use Banque\Importer;
@@ -69,6 +71,24 @@ function uploadedCsv(): string
 }
 
 /**
+ * Sens et chemin d'une catégorie dans un corps de requête : { sens, chemin: [catégorie1, catégorie2?] }.
+ *
+ * @param array<mixed> $body
+ * @return array{Direction, list<string>}
+ */
+function categoryTarget(array $body, string $key = 'chemin'): array
+{
+    $direction = Direction::tryFrom(is_string($body['sens'] ?? null) ? $body['sens'] : '')
+        ?? throw new HttpException(400, '« sens » doit valoir « dépense » ou « revenu »');
+    $path = $body[$key] ?? null;
+    if (!is_array($path) || $path === [] || count($path) > 2 || array_filter($path, 'is_string') !== $path) {
+        throw new HttpException(400, '« ' . $key . ' » doit être une liste de 1 ou 2 noms');
+    }
+
+    return [$direction, array_values($path)];
+}
+
+/**
  * Contenu d'un mois, accompagné pour chaque ligne du type d'opération et du marchand normalisés
  * (utilisés pour pré-remplir le motif d'une règle).
  *
@@ -87,19 +107,13 @@ function monthResponse(string $month, array $lines, LabelNormalizer $normalizer)
     ];
 }
 
-function notImplemented(string $step): callable
-{
-    return static function () use ($step): never {
-        throw new HttpException(501, 'Pas encore implémenté (' . $step . ')');
-    };
-}
-
 // BANQUE_DATA_DIR permet de travailler sur un autre dossier de données (essais, tests)
 $storage = new Storage(getenv('BANQUE_DATA_DIR') ?: dirname(__DIR__) . '/data');
 $json = new JsonFile($storage->backupsDir());
 $normalizer = new LabelNormalizer();
 $months = new MonthRepository($storage->monthsDir(), $json);
 $rules = new RuleRepository($storage->rulesFile(), $json);
+$categoryManager = new CategoryManager($storage->categoriesFile(), $json, $months, $rules);
 $catalog = static fn (): CategoryCatalog => CategoryCatalog::fromArray($json->read($storage->categoriesFile()));
 $router = new Router();
 
@@ -160,7 +174,32 @@ $router->add('GET', '/api/annee/{annee:\d{4}}', static fn (array $p): array => [
 ]);
 
 $router->add('GET', '/api/categories', static fn (): array => $json->read($storage->categoriesFile()));
-$router->add('PUT', '/api/categories', notImplemented('étape 7'));
+// Modifications : { action: ajouter | icone | renommer | supprimer, sens, chemin, nom?, icone?, sous_catégorie?, remplacement? }
+// Le renommage et la suppression sont répercutés dans tous les mois et toutes les règles.
+$router->add('PUT', '/api/categories', static function () use ($categoryManager): array {
+    $body = jsonBody();
+    [$direction, $path] = categoryTarget($body);
+    $text = static fn (string $key): string => is_string($body[$key] ?? null) ? $body[$key] : '';
+    $result = match ($body['action'] ?? null) {
+        'ajouter' => $categoryManager->add($direction, $path, $text('icone'), $text('sous_catégorie')),
+        'icone' => $categoryManager->changeIcon($direction, $path, $text('icone')),
+        'renommer' => $categoryManager->rename($direction, $path, $text('nom')),
+        'supprimer' => $categoryManager->delete(
+            $direction,
+            $path,
+            isset($body['remplacement']) ? categoryTarget($body, 'remplacement')[1] : null,
+        ),
+        default => throw new HttpException(400, 'Action inconnue'),
+    };
+
+    return ['catégories' => $categoryManager->all(), 'modifiés' => $result ?? ['lignes' => 0, 'règles' => 0]];
+});
+// Nombre de lignes et de règles qui utilisent une catégorie, pour les confirmations
+$router->add('POST', '/api/categories/usage', static function () use ($categoryManager): array {
+    [$direction, $path] = categoryTarget(jsonBody());
+
+    return $categoryManager->usage($direction, $path);
+});
 
 $router->add('GET', '/api/regles', static fn (): array => $json->read($storage->rulesFile()));
 // Apprentissage : { règle, appliquer_aux_mois } → la règle est ajoutée (ou remplace une règle apprise identique)
@@ -185,11 +224,56 @@ $router->add('POST', '/api/regles/correspondances', static function () use ($cat
         return $direction !== null && $rule->matches($normalizer->normalize($libelle), $direction);
     }, array_values($lines))];
 });
-$router->add('PUT', '/api/regles/{index:\d+}', notImplemented('étape 7'));
-$router->add('DELETE', '/api/regles/{index:\d+}', notImplemented('étape 7'));
+// Test d'un libellé : { libelle, sens } → libellé normalisé et catégorie obtenue
+$router->add('POST', '/api/regles/tester', static function () use ($rules, $catalog, $normalizer): array {
+    $body = jsonBody();
+    $libelle = is_string($body['libelle'] ?? null) ? $body['libelle'] : '';
+    $direction = Direction::tryFrom(is_string($body['sens'] ?? null) ? $body['sens'] : '')
+        ?? throw new HttpException(400, '« sens » doit valoir « dépense » ou « revenu »');
+    $all = $rules->all();
+    $result = (new Categorizer($all, $catalog(), $normalizer))->categorize($libelle, $direction);
+    $label = $normalizer->normalize($libelle);
+    $index = $result->rule === null ? false : array_search($result->rule, $all, true);
 
-$router->add('GET', '/api/parametres', notImplemented('étape 7'));
-$router->add('PUT', '/api/parametres', notImplemented('étape 7'));
+    return [
+        'type_operation' => $label->type,
+        'marchand' => $label->merchant,
+        'texte' => $label->text(),
+        'catégorie' => $result->toJsonValue(),
+        'source' => $result->source,
+        'règle' => $index === false ? null : ['index' => $index] + $all[$index]->toArray(),
+    ];
+});
+// Modification et suppression : le motif actuel est vérifié pour éviter d'agir sur une autre règle
+$router->add('PUT', '/api/regles/{index:\d+}', static function (array $p) use ($rules, $catalog): array {
+    $body = jsonBody();
+    $rule = $rules->update(
+        (int) $p['index'],
+        is_string($body['motif_actuel'] ?? null) ? $body['motif_actuel'] : '',
+        is_array($body['règle'] ?? null) ? $body['règle'] : [],
+        $catalog(),
+    );
+
+    return $rule->toArray();
+});
+$router->add('DELETE', '/api/regles/{index:\d+}', static function (array $p) use ($rules): array {
+    $rules->delete((int) $p['index'], is_string($_GET['motif'] ?? null) ? $_GET['motif'] : '');
+
+    return ['supprimée' => true];
+});
+
+$router->add('GET', '/api/parametres', static fn (): array => $json->read($storage->settingsFile()));
+$router->add('PUT', '/api/parametres', static function () use ($json, $storage): array {
+    $body = jsonBody();
+    $theme = $body['thème'] ?? null;
+    if (!in_array($theme, DefaultData::THEMES, true)) {
+        throw new HttpException(400, 'Thème inconnu (' . implode(', ', DefaultData::THEMES) . ')');
+    }
+    $settings = ['thème' => $theme] + $json->read($storage->settingsFile());
+    $json->write($storage->settingsFile(), $settings);
+
+    return $settings;
+});
 
 try {
     $storage->ensureDirectories();
