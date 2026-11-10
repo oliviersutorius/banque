@@ -9,21 +9,14 @@ use RuntimeException;
 
 final class JsonFileTest extends TestCase
 {
-    private string $dir;
+    private readonly TempDir $tmp;
+    private readonly string $dir;
 
     public function __construct()
     {
-        $this->dir = sys_get_temp_dir() . '/banque-test-' . bin2hex(random_bytes(4));
-        mkdir($this->dir . '/sauvegardes', 0700, true);
-    }
-
-    public function __destruct()
-    {
-        foreach (glob($this->dir . '/{,sauvegardes/}*', GLOB_BRACE) ?: [] as $file) {
-            is_file($file) && unlink($file);
-        }
-        @rmdir($this->dir . '/sauvegardes');
-        @rmdir($this->dir);
+        $this->tmp = new TempDir();
+        $this->dir = $this->tmp->path;
+        mkdir($this->dir . '/sauvegardes');
     }
 
     public function testEcritEnUtf8LisibleEtRelit(): void

@@ -47,6 +47,14 @@ final class LabelNormalizer
         '/\b[A-Z]{2}\d{2}ZZZ[0-9A-Z]+\b/',               // identifiant créancier SEPA : FR22ZZZ885B55
     ];
 
+    /**
+     * @return list<string> codes de type d'opération possibles, AUTRE compris
+     */
+    public static function typeCodes(): array
+    {
+        return [...array_values(array_unique(self::TYPES)), self::UNKNOWN_TYPE];
+    }
+
     public function normalize(string $libelle): NormalizedLabel
     {
         $text = Text::canonical($libelle);

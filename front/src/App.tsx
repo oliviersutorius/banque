@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { NavLink, Navigate, Route, Routes } from 'react-router-dom';
-import { api, type Sante } from './api';
+import { getSante, type Sante } from './api';
+import ImportPage from './pages/ImportPage';
 import Placeholder from './pages/Placeholder';
 
 const NAV = [
@@ -17,7 +18,7 @@ export default function App() {
   const [erreur, setErreur] = useState<string | null>(null);
 
   useEffect(() => {
-    api<Sante>('/sante').then(setSante, (e: Error) => setErreur(e.message));
+    getSante().then(setSante, (e: Error) => setErreur(e.message));
   }, []);
 
   return (
@@ -38,9 +39,9 @@ export default function App() {
       <main className="content">
         <Routes>
           <Route path="/" element={<Navigate to="/mois" replace />} />
-          <Route path="/mois" element={<Placeholder title="Vue mensuelle" step={5} />} />
+          <Route path="/mois/:mois?" element={<Placeholder title="Vue mensuelle" step={5} />} />
           <Route path="/annee" element={<Placeholder title="Récapitulatif annuel" step={6} />} />
-          <Route path="/import" element={<Placeholder title="Import d'un CSV" step={4} />} />
+          <Route path="/import" element={<ImportPage />} />
           <Route path="/categories" element={<Placeholder title="Catégories" step={7} />} />
           <Route path="/regles" element={<Placeholder title="Règles" step={7} />} />
           <Route path="/parametres" element={<Placeholder title="Paramètres" step={7} />} />

@@ -8,10 +8,22 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
+use Banque\CategoryCatalog;
+use Banque\Categorizer;
+use Banque\CsvFormatException;
+use Banque\CsvParser;
+use Banque\Direction;
 use Banque\HttpException;
+use Banque\Importer;
 use Banque\JsonFile;
+use Banque\LabelNormalizer;
+use Banque\MonthRepository;
 use Banque\Router;
+use Banque\RuleRepository;
 use Banque\Storage;
+
+const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+const MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 function sendJson(int $status, mixed $body): void
 {
@@ -22,8 +34,38 @@ function sendJson(int $status, mixed $body): void
 }
 
 /**
- * Gestionnaire provisoire des routes qui seront codées aux étapes suivantes.
+ * @return array<mixed>
  */
+function jsonBody(): array
+{
+    $raw = file_get_contents('php://input', false, null, 0, MAX_BODY_BYTES + 1);
+    if ($raw === false || strlen($raw) > MAX_BODY_BYTES) {
+        throw new HttpException(413, 'Requête trop volumineuse');
+    }
+    $data = json_decode($raw, true);
+    if (!is_array($data)) {
+        throw new HttpException(400, 'Corps JSON attendu');
+    }
+
+    return $data;
+}
+
+function uploadedCsv(): string
+{
+    $file = $_FILES['fichier'] ?? null;
+    if (!is_array($file) || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+        throw new HttpException(400, 'Aucun fichier reçu (champ « fichier »)');
+    }
+    if (in_array($file['error'], [UPLOAD_ERR_INI_SIZE, UPLOAD_ERR_FORM_SIZE], true) || $file['size'] > MAX_UPLOAD_BYTES) {
+        throw new HttpException(413, 'Fichier trop volumineux (2 Mo maximum)');
+    }
+    if ($file['error'] !== UPLOAD_ERR_OK || !is_uploaded_file($file['tmp_name'])) {
+        throw new HttpException(400, 'Échec de l\'envoi du fichier');
+    }
+
+    return (string) file_get_contents($file['tmp_name']);
+}
+
 function notImplemented(string $step): callable
 {
     return static function () use ($step): never {
@@ -31,19 +73,29 @@ function notImplemented(string $step): callable
     };
 }
 
-$storage = new Storage(dirname(__DIR__) . '/data');
+// BANQUE_DATA_DIR permet de travailler sur un autre dossier de données (essais, tests)
+$storage = new Storage(getenv('BANQUE_DATA_DIR') ?: dirname(__DIR__) . '/data');
 $json = new JsonFile($storage->backupsDir());
+$normalizer = new LabelNormalizer();
+$months = new MonthRepository($storage->monthsDir(), $json);
+$rules = new RuleRepository($storage->rulesFile(), $json);
+$catalog = static fn (): CategoryCatalog => CategoryCatalog::fromArray($json->read($storage->categoriesFile()));
 $router = new Router();
 
-$router->add('GET', '/api/sante', static fn (): array => [
-    'statut' => 'ok',
-    'php' => PHP_VERSION,
-    'données' => is_dir($storage->monthsDir()),
-]);
+$router->add('GET', '/api/sante', static fn (): array => ['statut' => 'ok', 'php' => PHP_VERSION]);
 
-// Étape 4 : import
-$router->add('POST', '/api/import/preview', notImplemented('étape 4'));
-$router->add('POST', '/api/import/confirm', notImplemented('étape 4'));
+$router->add('POST', '/api/import/preview', static function () use ($rules, $catalog, $normalizer, $months): array {
+    $categories = $catalog();
+    $importer = new Importer(new CsvParser(), new Categorizer($rules->all(), $categories, $normalizer), $normalizer, $months, $categories);
+
+    return $importer->preview(uploadedCsv());
+});
+$router->add('POST', '/api/import/confirm', static function () use ($rules, $catalog, $normalizer, $months): array {
+    $categories = $catalog();
+    $importer = new Importer(new CsvParser(), new Categorizer($rules->all(), $categories, $normalizer), $normalizer, $months, $categories);
+
+    return $importer->confirm(jsonBody());
+});
 
 // Étapes 5 et 6 : mois et années
 $router->add('GET', '/api/mois', notImplemented('étape 5'));
@@ -51,13 +103,35 @@ $router->add('GET', '/api/mois/{mois:\d{6}}', notImplemented('étape 5'));
 $router->add('PATCH', '/api/mois/{mois:\d{6}}/lignes/{index:\d+}', notImplemented('étape 5'));
 $router->add('GET', '/api/annee/{annee:\d{4}}', notImplemented('étape 6'));
 
-// Étape 7 : catégories, règles, paramètres
 $router->add('GET', '/api/categories', static fn (): array => $json->read($storage->categoriesFile()));
 $router->add('PUT', '/api/categories', notImplemented('étape 7'));
+
 $router->add('GET', '/api/regles', static fn (): array => $json->read($storage->rulesFile()));
-$router->add('POST', '/api/regles', notImplemented('étape 7'));
+// Apprentissage : { règle, appliquer_aux_mois } → la règle est ajoutée (ou remplace une règle apprise identique)
+$router->add('POST', '/api/regles', static function () use ($rules, $catalog, $normalizer, $months): array {
+    $body = jsonBody();
+    $rule = RuleRepository::learnedFromInput(is_array($body['règle'] ?? null) ? $body['règle'] : [], $catalog());
+    $replaced = $rules->learn($rule);
+    $updated = ($body['appliquer_aux_mois'] ?? false) === true ? $months->applyRuleToUncategorized($rule, $normalizer) : 0;
+
+    return ['règle' => $rule->toArray(), 'remplacée' => $replaced, 'lignes_mises_à_jour' => $updated];
+});
+// Lignes similaires : { règle, lignes: [{ libelle, sens }] } → quelles lignes la règle reconnaît
+$router->add('POST', '/api/regles/correspondances', static function () use ($catalog, $normalizer): array {
+    $body = jsonBody();
+    $rule = RuleRepository::learnedFromInput(is_array($body['règle'] ?? null) ? $body['règle'] : [], $catalog());
+    $lines = is_array($body['lignes'] ?? null) ? $body['lignes'] : [];
+
+    return ['correspondances' => array_map(static function (mixed $line) use ($rule, $normalizer): bool {
+        $direction = Direction::tryFrom(is_array($line) && is_string($line['sens'] ?? null) ? $line['sens'] : '');
+        $libelle = is_array($line) && is_string($line['libelle'] ?? null) ? $line['libelle'] : '';
+
+        return $direction !== null && $rule->matches($normalizer->normalize($libelle), $direction);
+    }, array_values($lines))];
+});
 $router->add('PUT', '/api/regles/{index:\d+}', notImplemented('étape 7'));
 $router->add('DELETE', '/api/regles/{index:\d+}', notImplemented('étape 7'));
+
 $router->add('GET', '/api/parametres', notImplemented('étape 7'));
 $router->add('PUT', '/api/parametres', notImplemented('étape 7'));
 
@@ -69,7 +143,9 @@ try {
     sendJson(200, $result);
 } catch (HttpException $e) {
     sendJson($e->status(), ['erreur' => $e->getMessage()] + $e->details());
+} catch (InvalidArgumentException | CsvFormatException $e) {
+    sendJson(422, ['erreur' => $e->getMessage()]);
 } catch (Throwable $e) {
     error_log((string) $e);
-    sendJson(500, ['erreur' => 'Erreur interne du serveur']);
+    sendJson(500, ['erreur' => 'Erreur interne : ' . $e->getMessage()]);
 }
