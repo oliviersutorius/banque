@@ -16,7 +16,7 @@ Documentation :
 ## Prérequis
 
 - PHP 8.2 ou plus récent, avec l'extension `mbstring`
-- Node.js **22.12** ou plus récent et npm (exigé par Vite 8 et Vitest 5)
+- Node.js **24 LTS** et npm (version dans `front/.nvmrc` : `nvm use` dans `front/`)
 
 ## Installation
 
