@@ -10,6 +10,7 @@ Documentation :
 
 - [docs/FONCTIONNEL.md](docs/FONCTIONNEL.md) — utilisation, import et doublons, règles et apprentissage, catégories
 - [docs/TECHNIQUE.md](docs/TECHNIQUE.md) — architecture, formats JSON, API, sécurité, tests, écarts au cahier des charges
+- [docs/AUDIT_SECURITE.md](docs/AUDIT_SECURITE.md) — audit de sécurité, montées de version, étapes pour une mise en ligne
 - [PROMPT.md](PROMPT.md) — cahier des charges d'origine
 
 ## Prérequis
