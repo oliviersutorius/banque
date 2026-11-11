@@ -3,6 +3,10 @@
 Date : 11 novembre 2026 — périmètre : `api/`, `router.php`, `front/`, environnement local (PHP 8.2.35, Node 22.12.0,
 npm 10.9.0).
 
+**Suivi** — 11/11/2026 : mises à jour de Node (24 LTS), React 19, Recharts 3 et TypeScript 7 faites ; Dependabot et
+CI GitHub Actions en place (détail au §2, état au §4). Restent : PHP 8.5, les failles V1 à V9, et les trois paquets de
+build qui attendent le délai de 14 jours.
+
 ## Synthèse
 
 | Contexte | Verdict |
@@ -122,7 +126,7 @@ constaté). **Correctif** : `umask(0077)` au démarrage de l'API, ou `chmod 0600
 
 | Outil | Version | État au 11/11/2026 | Action |
 |---|---|---|---|
-| PHP | 8.2.35 | Correctifs de **sécurité uniquement jusqu'au 31/12/2026** — fin de vie dans 7 semaines | **Urgent** : passer en 8.4 (support sécurité jusqu'à fin 2028) ou 8.5 |
+| PHP | 8.2.35 | Correctifs de **sécurité uniquement jusqu'au 31/12/2026** — fin de vie dans 7 semaines | ⏳ **Urgent** : passage en **8.5** décidé (sécurité jusqu'à fin 2029), installation en attente ; la CI tourne déjà en 8.5 |
 | Node.js | 22.12.0 → **24.22.2** | 24 LTS, maintenue jusqu'à avril 2028 | ✅ Fait (`front/.nvmrc`, `engines`) |
 | npm | 10.9.0 → **11.19.1** | Fourni avec Node 24 | ✅ Fait |
 
@@ -243,15 +247,17 @@ protection contre la force brute sans écrire de code d'authentification ; il re
 ### Étape 9 — Maintien dans le temps
 
 - Dependabot + CI (§2), mise à jour PHP à chaque version de correctif, revue mensuelle de `npm outdated`.
-- Suivre la fin de vie : PHP 8.4 jusqu'à fin 2028, Node 24 jusqu'à avril 2028.
+- Suivre la fin de vie : PHP 8.5 jusqu'à fin 2029, Node 24 jusqu'à avril 2028.
 
 ## 4. Plan d'action résumé
 
-| Priorité | Action | Effort |
-|---|---|---|
-| Immédiat | Corriger V1 (CSRF) et V2 (Host), même en local | ~1 h |
-| Immédiat | Mettre à jour `vite`, `@vitejs/plugin-react`, `vitest` | 15 min |
-| Avant le 31/12/2026 | PHP 8.2 → 8.4 | 30 min + tests |
-| Court terme | V3, V9, mise à jour Node 22.x | 1 h |
-| Avant mise en ligne | Étapes 1 à 8 (ou VPN / proxy d'identité + V1–V4, V9) | 2 à 5 jours selon le modèle choisi |
-| Moyen terme | React 19, Recharts 3, TypeScript | 1 à 2 jours |
+| Priorité | Action | Effort | État |
+|---|---|---|---|
+| Immédiat | Corriger V1 (CSRF) et V2 (Host), même en local | ~1 h | À faire |
+| Immédiat | Mettre à jour `vite`, `@vitejs/plugin-react`, `vitest` | 15 min | ⏳ Versions publiées il y a moins de 14 jours : via Dependabot vers le 25/11/2026 |
+| Avant le 31/12/2026 | PHP 8.2 → 8.5 | 30 min + tests | ⏳ En attente de l'installation (`sudo apt install php8.5-cli php8.5-mbstring`) |
+| Court terme | V3, V9 | 1 h | À faire |
+| Court terme | Node 22.12 → 24.22.2 LTS | 15 min | ✅ Fait le 11/11/2026 |
+| Avant mise en ligne | Étapes 1 à 8 (ou VPN / proxy d'identité + V1–V4, V9) | 2 à 5 jours selon le modèle choisi | À faire |
+| Moyen terme | React 19, Recharts 3, TypeScript 7 | 1 à 2 jours | ✅ Fait le 11/11/2026 (graphiques vérifiés dans le navigateur) |
+| Automatisation | Dependabot (délai de 14 jours) + CI GitHub Actions (tests, build, `npm audit`) | 1 h | ✅ Fait le 11/11/2026 ; premier passage de la CI à vérifier après le push |
