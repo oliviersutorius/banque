@@ -61,6 +61,13 @@ export default function CategoryBlock({ titre, sens, parts, categories, affichag
     fill: couleur(categories, sens, p.nom),
   }));
   const total = parts.reduce((s, p) => s + p.cents, 0);
+  // Recharts passe la donnée cliquée sous une forme qui lui est propre : on retrouve la catégorie par son rang
+  const clic = (_: unknown, index: number) => {
+    const d = donnees[index];
+    if (d) {
+      onSelect(d.nom);
+    }
+  };
   // Sur un petit écran, les noms de catégories laissent plus de place aux barres
   const largeurNoms = window.matchMedia('(max-width: 480px)').matches ? 120 : 170;
 
@@ -95,7 +102,7 @@ export default function CategoryBlock({ titre, sens, parts, categories, affichag
               <XAxis type="number" hide />
               <YAxis type="category" dataKey="libelle" width={largeurNoms} tickLine={false} axisLine={false} tick={{ fontSize: 13, fill: 'var(--text)' }} />
               <Tooltip content={<Infobulle />} cursor={{ fill: 'var(--bg)' }} />
-              <Bar dataKey="cents" radius={[0, 10, 10, 0]} barSize={22} animationDuration={700} onClick={(d: Donnee) => onSelect(d.nom)} className="clickable">
+              <Bar dataKey="cents" radius={[0, 10, 10, 0]} barSize={22} animationDuration={700} onClick={clic} className="clickable">
                 {donnees.map((d) => (
                   <Cell key={d.nom} fill={d.fill} opacity={selection && selection !== d.nom ? 0.4 : 1} />
                 ))}
@@ -117,7 +124,7 @@ export default function CategoryBlock({ titre, sens, parts, categories, affichag
                   paddingAngle={2}
                   cornerRadius={6}
                   animationDuration={700}
-                  onClick={(d: Donnee) => onSelect(d.nom)}
+                  onClick={clic}
                   className="clickable"
                 >
                   {donnees.map((d) => (

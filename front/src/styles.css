@@ -620,6 +620,11 @@ h3 {
   }
 }
 
+/* Recharts 3 rend le graphique focalisable (navigation au clavier) : pas de cadre après un clic à la souris */
+.recharts-surface:focus:not(:focus-visible) {
+  outline: none;
+}
+
 .chart-tooltip {
   display: flex;
   flex-direction: column;
