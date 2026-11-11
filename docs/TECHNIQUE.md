@@ -27,6 +27,7 @@ développement : Vite (:5173) sert front/src et relaie /api vers :8000
 | Classe | Rôle |
 |---|---|
 | `Router` | Associe méthode + motif d'URL (`{nom:regex}`) à un gestionnaire ; 404 / 405 |
+| `RequestGuard` | Avant toute route : hôte autorisé (DNS rebinding), même origine pour les écritures (CSRF), corps en `application/json` |
 | `HttpException`, `CsvFormatException`, `LineConflictException` | Erreurs → statut HTTP (voir « Erreurs ») |
 | `Storage` | Chemins de `data/`, création des dossiers et des fichiers initiaux |
 | `JsonFile` | Lecture, écriture atomique, sauvegardes |
@@ -158,6 +159,9 @@ Au premier appel de l'API, `Storage` crée `data/`, `data/mois/`, `data/sauvegar
 
 `BANQUE_DATA_DIR` (variable d'environnement) remplace le dossier `data/` : instance d'essai, tests manuels.
 
+`BANQUE_HOTES` (variable d'environnement, noms séparés par des virgules) ajoute des noms d'hôte acceptés par l'API en
+plus de `localhost`, `127.0.0.1` et `[::1]` : à renseigner si l'application est un jour servie sous un autre nom.
+
 ## API
 
 Toutes les réponses sont en JSON. Les erreurs ont la forme `{ "erreur": "message" }`.
@@ -208,16 +212,24 @@ elle reçoit toutes les lignes du CSV et refait la fusion, ce qui la rend rejoua
 | Statut | Cas |
 |---|---|
 | 400 | Corps JSON absent ou mal formé, fichier manquant, paramètre invalide |
+| 403 | Hôte non autorisé, ou écriture venue d'une autre origine (`RequestGuard`) |
 | 404 | Route ou mois inconnu |
 | 405 | Méthode non autorisée |
 | 409 | Ligne ou règle modifiée entre-temps |
 | 413 | Fichier (2 Mo) ou corps (10 Mo) trop volumineux |
+| 415 | Corps JSON envoyé sans `Content-Type: application/json` |
 | 422 | Données refusées : CSV sans en-tête, catégorie inconnue, montant invalide, règle mal formée… |
 | 500 | Erreur interne (message renvoyé et journalisé) |
 
 ## Sécurité
 
 - Usage local uniquement, sans authentification : ne pas exposer le serveur sur un réseau.
+- Protection contre les autres sites ouverts dans le navigateur (`RequestGuard`, appelé avant toute route) :
+  - **DNS rebinding** : l'API ne répond qu'aux hôtes `localhost`, `127.0.0.1` et `[::1]` (tout port), plus
+    `BANQUE_HOTES` ; sinon 403 ;
+  - **CSRF** : une écriture (`POST`, `PUT`, `PATCH`, `DELETE`) est refusée (403) si son en-tête `Origin` ne correspond
+    pas à l'hôte ou si `Sec-Fetch-Site` vaut `cross-site`/`same-site` ; un corps JSON doit être annoncé en
+    `application/json` (415), ce qu'un autre site ne peut pas faire sans pré-vérification CORS, que l'API n'accepte pas.
 - Aucun chemin n'est construit à partir d'une saisie non contrôlée : le mois est validé (`YYYYMM`, mois 01–12) avant
   tout accès disque ; `router.php` ne sert que des fichiers situés dans `front/dist`.
 - Toutes les entrées sont validées : formats de date et de montant, existence des catégories, sens, types

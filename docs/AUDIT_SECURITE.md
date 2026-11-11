@@ -3,15 +3,15 @@
 Date : 11 novembre 2026 — périmètre : `api/`, `router.php`, `front/`, environnement local (PHP 8.2.35, Node 22.12.0,
 npm 10.9.0).
 
-**Suivi** — 11/11/2026 : mises à jour de PHP (8.5), Node (24 LTS), React 19, Recharts 3 et TypeScript 7 faites ;
-Dependabot et CI GitHub Actions en place (détail au §2, état au §4). Restent : les failles V1 à V9, et les trois paquets
-de build qui attendent le délai de 14 jours.
+**Suivi** — 11/11/2026 : failles **V1 (CSRF) et V2 (DNS rebinding) corrigées** ; mises à jour de PHP (8.5), Node
+(24 LTS), React 19, Recharts 3 et TypeScript 7 faites ; Dependabot et CI GitHub Actions en place (détail au §2, état au
+§4). Restent : les failles V3 à V9, et les trois paquets de build qui attendent le délai de 14 jours.
 
 ## Synthèse
 
 | Contexte | Verdict |
 |---|---|
-| Usage actuel (local, `php -S localhost`) | **Correct**, avec deux failles exploitables depuis le navigateur (CSRF, DNS rebinding) à corriger |
+| Usage actuel (local, `php -S localhost`) | **Correct** ; les deux failles exploitables depuis le navigateur (CSRF, DNS rebinding) sont corrigées depuis le 11/11/2026 |
 | Mise en ligne avec authentification | **Pas prêt** : l'architecture actuelle n'a ni identité, ni session, ni cloisonnement des données, ni durcissement HTTP |
 
 Points forts constatés : typage strict partout, validation systématique des entrées (mois `YYYYMM`, dates, montants,
@@ -24,17 +24,17 @@ par git.
 
 Gravité évaluée pour l'usage **actuel** ; la colonne « En ligne » indique la gravité une fois exposé.
 
-| # | Constat | Actuel | En ligne |
-|---|---|---|---|
-| V1 | CSRF sur les routes `POST` | Moyenne | Critique |
-| V2 | DNS rebinding : aucun contrôle de l'en-tête `Host` | Moyenne | — (remplacé par V5) |
-| V3 | Messages d'exception internes renvoyés au client (500) | Faible | Moyenne |
-| V4 | Aucun en-tête de sécurité HTTP | Faible | Élevée |
-| V5 | Aucune authentification ni autorisation | Nulle (local) | **Critique** |
-| V6 | Serveur intégré `php -S` | Nulle | **Critique** |
-| V7 | Données bancaires stockées en clair | Faible | Élevée |
-| V8 | Aucune limitation de débit | Nulle | Moyenne |
-| V9 | Permissions des fichiers de données en 0664 | Faible | Moyenne |
+| # | Constat | Actuel | En ligne | État |
+|---|---|---|---|---|
+| V1 | CSRF sur les routes `POST` | Moyenne | Critique | ✅ Corrigé le 11/11/2026 |
+| V2 | DNS rebinding : aucun contrôle de l'en-tête `Host` | Moyenne | — (remplacé par V5) | ✅ Corrigé le 11/11/2026 |
+| V3 | Messages d'exception internes renvoyés au client (500) | Faible | Moyenne | À faire |
+| V4 | Aucun en-tête de sécurité HTTP | Faible | Élevée | À faire |
+| V5 | Aucune authentification ni autorisation | Nulle (local) | **Critique** | À faire avant mise en ligne |
+| V6 | Serveur intégré `php -S` | Nulle | **Critique** | À faire avant mise en ligne |
+| V7 | Données bancaires stockées en clair | Faible | Élevée | À faire avant mise en ligne |
+| V8 | Aucune limitation de débit | Nulle | Moyenne | À faire avant mise en ligne |
+| V9 | Permissions des fichiers de données en 0664 | Faible | Moyenne | À faire |
 
 ### V1 — CSRF sur les routes `POST`
 
@@ -56,6 +56,20 @@ ou un `fetch(..., { mode: 'no-cors', headers: { 'Content-Type': 'text/plain' } }
 pour toutes les méthodes autres que `GET`. En ligne, ajouter un cookie de session `SameSite=Strict` ou `Lax` + jeton
 CSRF (double soumission).
 
+**✅ Corrigé le 11/11/2026** — classe `api/src/RequestGuard.php`, appelée dans `api/index.php` avant toute route :
+
+- toute écriture (`POST`, `PUT`, `PATCH`, `DELETE`) dont l'en-tête `Origin` ne correspond pas à l'hôte de la requête,
+  ou dont `Sec-Fetch-Site` vaut `cross-site` ou `same-site`, est refusée (**403**) ;
+- `jsonBody()` exige `Content-Type: application/json` (**415** sinon) : un autre site ne peut envoyer ce type qu'après
+  une pré-vérification CORS, que l'API refuse puisqu'elle n'envoie aucun en-tête CORS. Cela couvre aussi les vieux
+  navigateurs qui n'envoient pas `Origin` ;
+- l'aperçu d'import (`multipart/form-data`) reste accepté, mais seulement depuis la même origine.
+
+Vérification : faille reproduite avant correctif (une requête `text/plain` venue d'un autre site écrivait bien une règle
+dans `regles.json`), puis rejouée après : 403 ou 415, rien n'est écrit. Les usages normaux passent : front servi par
+`router.php`, front Vite via son proxy (`localhost:5173`), `curl` sans `Origin`, changement de thème depuis Chrome.
+Tests : `api/tests/RequestGuardTest.php` (7 tests). Le jeton CSRF reste à ajouter avec l'authentification (étape 5).
+
 ### V2 — DNS rebinding
 
 Le serveur répond quel que soit l'en-tête `Host`. Une page dont le domaine est réaffecté vers `127.0.0.1` peut lire
@@ -63,6 +77,13 @@ toute l'API (`/api/annee/2025`, `/api/mois`…) en « même origine ».
 
 **Correctif** : dans `router.php`, refuser (421/403) toute requête dont `Host` n'est pas `localhost:8000`,
 `127.0.0.1:8000` ou `[::1]:8000`. En ligne : liste blanche du nom de domaine dans le serveur web.
+
+**✅ Corrigé le 11/11/2026** — même classe `RequestGuard` : l'API répond **403** à tout hôte autre que `localhost`,
+`127.0.0.1` ou `[::1]`. Le port n'est pas contrôlé, pour garder `:8000`, `:8001` et le proxy Vite `:5173`. Le contrôle
+est fait dans `api/index.php` plutôt que dans `router.php`, pour s'appliquer aussi derrière un vrai serveur web (PHP-FPM).
+Les fichiers du front restent servis quel que soit l'hôte : ils sont publics et ne contiennent aucune donnée. La
+variable d'environnement `BANQUE_HOTES` (noms séparés par des virgules) permettra d'ajouter le nom de domaine lors
+d'une mise en ligne. Vérification : `Host: rebinding.example:8002` → 403 sur `/api/regles` et `/api/mois`.
 
 ### V3 — Fuite d'informations dans les erreurs 500
 
@@ -176,7 +197,8 @@ La réponse change beaucoup le travail :
 
 Alternative la plus sûre pour un usage personnel : **ne pas exposer l'application publiquement** et y accéder par
 VPN (Tailscale, WireGuard) ou par un proxy d'identité (Cloudflare Access, Authelia, oauth2-proxy). On obtient MFA et
-protection contre la force brute sans écrire de code d'authentification ; il reste à corriger V1–V4 et V9.
+protection contre la force brute sans écrire de code d'authentification ; il reste à corriger V3, V4 et V9 (V1 et V2 sont
+corrigées).
 
 ### Étape 2 — Hébergement et serveur web
 
@@ -215,7 +237,7 @@ protection contre la force brute sans écrire de code d'authentification ; il re
 
 ### Étape 5 — Correctifs de l'application (V1 à V4, V9)
 
-- `Content-Type` imposé + contrôle `Origin`/`Sec-Fetch-Site` + jeton CSRF ;
+- ✅ `Content-Type` imposé + contrôle `Origin`/`Sec-Fetch-Site` (fait, V1) ; jeton CSRF à ajouter avec la session ;
 - erreurs 500 génériques, `/api/sante` sans version ;
 - en-têtes de sécurité (§1, V4) et script de thème déplacé dans un fichier ;
 - `umask(0077)` ;
@@ -253,11 +275,11 @@ protection contre la force brute sans écrire de code d'authentification ; il re
 
 | Priorité | Action | Effort | État |
 |---|---|---|---|
-| Immédiat | Corriger V1 (CSRF) et V2 (Host), même en local | ~1 h | À faire |
+| Immédiat | Corriger V1 (CSRF) et V2 (Host), même en local | ~1 h | ✅ Fait le 11/11/2026 (`RequestGuard`, 7 tests) |
 | Immédiat | Mettre à jour `vite`, `@vitejs/plugin-react`, `vitest` | 15 min | ⏳ Versions publiées il y a moins de 14 jours : via Dependabot vers le 25/11/2026 |
 | Avant le 31/12/2026 | PHP 8.2 → 8.5 | 30 min + tests | ✅ Fait le 11/11/2026 (PHP 8.5.12) |
 | Court terme | V3, V9 | 1 h | À faire |
 | Court terme | Node 22.12 → 24.22.2 LTS | 15 min | ✅ Fait le 11/11/2026 |
-| Avant mise en ligne | Étapes 1 à 8 (ou VPN / proxy d'identité + V1–V4, V9) | 2 à 5 jours selon le modèle choisi | À faire |
+| Avant mise en ligne | Étapes 1 à 8 (ou VPN / proxy d'identité + V3, V4, V9) | 2 à 5 jours selon le modèle choisi | À faire |
 | Moyen terme | React 19, Recharts 3, TypeScript 7 | 1 à 2 jours | ✅ Fait le 11/11/2026 (graphiques vérifiés dans le navigateur) |
 | Automatisation | Dependabot (délai de 14 jours) + CI GitHub Actions (tests, build, `npm audit`) | 1 h | ✅ Fait le 11/11/2026 ; premier passage de la CI à vérifier après le push |

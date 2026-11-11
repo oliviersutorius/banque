@@ -22,6 +22,7 @@ use Banque\LabelNormalizer;
 use Banque\LineConflictException;
 use Banque\MonthLine;
 use Banque\MonthRepository;
+use Banque\RequestGuard;
 use Banque\Router;
 use Banque\RuleRepository;
 use Banque\Storage;
@@ -42,6 +43,7 @@ function sendJson(int $status, mixed $body): void
  */
 function jsonBody(): array
 {
+    RequestGuard::requireJson($_SERVER);
     $raw = file_get_contents('php://input', false, null, 0, MAX_BODY_BYTES + 1);
     if ($raw === false || strlen($raw) > MAX_BODY_BYTES) {
         throw new HttpException(413, 'Requête trop volumineuse');
@@ -107,6 +109,8 @@ function monthResponse(string $month, array $lines, LabelNormalizer $normalizer)
     ];
 }
 
+// BANQUE_HOTES : noms d'hôte acceptés en plus de localhost, 127.0.0.1 et [::1] (séparés par des virgules)
+$guard = RequestGuard::fromList(getenv('BANQUE_HOTES') ?: '');
 // BANQUE_DATA_DIR permet de travailler sur un autre dossier de données (essais, tests)
 $storage = new Storage(getenv('BANQUE_DATA_DIR') ?: dirname(__DIR__) . '/data');
 $json = new JsonFile($storage->backupsDir());
@@ -295,6 +299,7 @@ $router->add('PUT', '/api/parametres', static function () use ($json, $storage):
 });
 
 try {
+    $guard->check($_SERVER);
     $storage->ensureDirectories();
     $storage->initializeDefaults($json);
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
