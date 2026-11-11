@@ -123,8 +123,8 @@ constaté). **Correctif** : `umask(0077)` au démarrage de l'API, ou `chmod 0600
 | Outil | Version | État au 11/11/2026 | Action |
 |---|---|---|---|
 | PHP | 8.2.35 | Correctifs de **sécurité uniquement jusqu'au 31/12/2026** — fin de vie dans 7 semaines | **Urgent** : passer en 8.4 (support sécurité jusqu'à fin 2028) ou 8.5 |
-| Node.js | 22.12.0 | 22 en maintenance LTS jusqu'à avril 2027 ; 22.12 est ancien dans la branche | Mettre à jour vers la dernière 22.x tout de suite, puis Node 24 LTS |
-| npm | 10.9.0 | Fourni avec Node 22 | Suivra Node |
+| Node.js | 22.12.0 → **24.22.2** | 24 LTS, maintenue jusqu'à avril 2028 | ✅ Fait (`front/.nvmrc`, `engines`) |
+| npm | 10.9.0 → **11.19.1** | Fourni avec Node 24 | ✅ Fait |
 
 Node ne sert qu'à **construire** le front (il ne tourne pas en production), son exposition est donc limitée ; PHP, lui,
 est exposé directement.
@@ -133,25 +133,27 @@ est exposé directement.
 
 `npm audit` : 0 vulnérabilité connue.
 
-| Paquet | Actuelle | Dernière | Type | Recommandation |
-|---|---|---|---|---|
-| vite | 8.3.5 | 8.3.8 | correctif | **À faire** (Vite a régulièrement des correctifs de sécurité du serveur de dev) |
-| @vitejs/plugin-react | 6.1.2 | 6.3.0 | mineure | À faire |
-| vitest | 5.0.5 | 5.1.0 | mineure | À faire |
-| react, react-dom | 18.3.1 | 19.3.1 | **majeure** | Recommandé avant la mise en ligne : React 18 ne reçoit plus d'évolutions. Migration simple ici (pas de `forwardRef`/`defaultProps` hérités à vérifier) |
-| @types/react, @types/react-dom | 18.x | 19.3.0 | majeure | Avec React 19 |
-| recharts | 2.15.0 | 3.10.1 | **majeure** | La 2.x n'évolue plus ; migration à tester (API des tooltips et des légendes modifiée) |
-| typescript | 5.6.3 | 7.0.2 | **majeure** | Outil de build uniquement, sans impact sécurité ; passer au moins à la dernière 5.x, TS 7 (compilateur natif) dans un second temps |
-| react-router-dom | 7.18.5 | à jour | — | — |
+| Paquet | Avant | Après (11/11/2026) | État |
+|---|---|---|---|
+| react, react-dom | 18.3.1 | 19.3.1 | ✅ Fait |
+| @types/react, @types/react-dom | 18.x | 19.3.0 | ✅ Fait |
+| recharts | 2.15.0 | 3.10.1 (+ `react-is` 19.3.1 explicite) | ✅ Fait : clic par rang, contour de focus à la souris masqué |
+| typescript | 5.6.3 | 7.0.2 | ✅ Fait |
+| vite | 8.3.5 | 8.3.5 | ⏳ 8.3.8 publiée le 11/11 : Dependabot la proposera après le délai de 14 jours |
+| @vitejs/plugin-react | 6.1.2 | 6.1.2 | ⏳ 6.3.0 publiée le 09/11 : idem |
+| vitest | 5.0.5 | 5.0.5 | ⏳ 5.1.0 publiée le 02/11 : idem |
+| react-router-dom | 7.18.5 | 7.18.5 | À jour |
 
-Ordre conseillé : correctifs et mineures (`vite`, `@vitejs/plugin-react`, `vitest`) → React 19 + types → Recharts 3
-→ TypeScript. Garder la règle actuelle : versions exactes, publiées depuis au moins deux semaines, `npm audit` après
-chaque passage, tests (`npm test`, `php api/tests/run.php`) et vérification manuelle des graphiques.
+Règle conservée : versions exactes, publiées depuis au moins deux semaines, `npm audit` après chaque passage, tests
+(`npm test`, `php api/tests/run.php`) et vérification manuelle des graphiques. Exception : une version plus récente
+est installée sans attendre si `npm audit` signale une faille sur la version en place.
 
 ### Automatisation
 
-- Activer **Dependabot** (ou Renovate) sur le dépôt GitHub pour npm, avec un délai de 14 jours (`cooldown`).
-- Ajouter `npm audit --audit-level=high` et les tests PHP/JS dans une CI (GitHub Actions).
+- ✅ **Dependabot** (`.github/dependabot.yml`) : npm et GitHub Actions, chaque semaine, délai de 14 jours
+  (`cooldown`), correctifs et mineures regroupés, majeures dans des PR séparées.
+- ✅ **CI** (`.github/workflows/ci.yml`) : lint et tests PHP 8.5, tests, build et `npm audit --audit-level=high` du
+  front, à chaque push, à chaque PR et chaque lundi ; actions épinglées par SHA.
 - Côté serveur : mises à jour de sécurité automatiques de l'OS (`unattended-upgrades`) et dépôt PHP maintenu
   (paquets de la distribution ou dépôt Ondřej Surý / Remi).
 

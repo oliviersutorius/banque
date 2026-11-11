@@ -1,0 +1,28 @@
+# Mises à jour automatiques des dépendances.
+# Délai de 14 jours après publication, comme pour les mises à jour manuelles (docs/TECHNIQUE.md, § Sécurité).
+# Les correctifs et versions mineures sont regroupés ; chaque version majeure arrive dans sa propre PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /front
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14
+    groups:
+      react:
+        patterns: ["react", "react-dom", "react-is", "@types/react", "@types/react-dom"]
+        update-types: ["minor", "patch"]
+      build:
+        patterns: ["vite", "@vitejs/plugin-react", "vitest", "typescript"]
+        update-types: ["minor", "patch"]
+      charts:
+        patterns: ["recharts"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 14

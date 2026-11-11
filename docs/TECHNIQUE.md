@@ -224,7 +224,9 @@ elle reçoit toutes les lignes du CSV et refait la fusion, ce qui la rend rejoua
   d'opération, tailles.
 - Écritures atomiques avec verrou ; sauvegarde avant chaque modification.
 - Dépendances du front : `npm audit` sans vulnérabilité ; versions exactes (`--save-exact`), choisies publiées depuis
-  au moins deux semaines. Le lockfile a été régénéré avec `npm install --before=2026-10-28`.
+  au moins deux semaines (`npm install --save-exact --before=<date du jour - 14 jours>`). Dependabot
+  (`.github/dependabot.yml`) propose les mises à jour avec le même délai ; la CI (`.github/workflows/ci.yml`) lance
+  les tests, le build et `npm audit --audit-level=high` à chaque push, à chaque PR et chaque lundi.
 
 ## Tests
 

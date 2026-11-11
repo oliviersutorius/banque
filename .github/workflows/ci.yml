@@ -1,0 +1,48 @@
+# Tests de l'API et du front, build et audit des dépendances.
+# Le passage hebdomadaire rattrape les nouvelles alertes de sécurité sans attendre un commit.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: shivammathur/setup-php@eb7c497e18156a6bbabfef1d3a82760b9eda3962 # 2.40.0
+        with:
+          php-version: "8.5"
+          extensions: mbstring
+          coverage: none
+      - name: Syntaxe
+        run: find api router.php -name '*.php' -print0 | xargs -0 -n1 php -l
+      # Les tests qui lisent exemple.csv ou csv/ (non versionnés) sont ignorés
+      - name: Tests
+        run: php api/tests/run.php
+
+  front:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: front
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: front/.nvmrc
+          cache: npm
+          cache-dependency-path: front/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Audit des dépendances
+        run: npm audit --audit-level=high
