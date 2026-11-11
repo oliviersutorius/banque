@@ -15,7 +15,7 @@ navigateur ──► php -S localhost:8000 router.php
 développement : Vite (:5173) sert front/src et relaie /api vers :8000
 ```
 
-- **Back** : PHP 8.2+, sans framework ni dépendance Composer. `declare(strict_types=1)`, PSR-12, types sur toutes les
+- **Back** : PHP 8.5+, sans framework ni dépendance Composer. `declare(strict_types=1)`, PSR-12, types sur toutes les
   signatures. Chargement automatique des classes par `api/bootstrap.php`.
 - **Front** : React 18, TypeScript strict, React Router 7, Recharts, Vite 8. Polices embarquées via `@fontsource`
   (aucune requête externe).

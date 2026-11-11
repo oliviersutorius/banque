@@ -3,7 +3,7 @@
 Site personnel, utilisé uniquement en local, pour analyser ses dépenses et revenus à partir des exports CSV du Crédit Agricole.
 
 - **Front** : React 18 + Vite + TypeScript, React Router, Recharts (`front/`), polices embarquées (aucune requête externe)
-- **API** : PHP 8.2+ sans framework (`api/`)
+- **API** : PHP 8.5+ sans framework (`api/`)
 - **Stockage** : fichiers JSON dans `data/`, créé au premier lancement et **ignoré par git** (données bancaires personnelles)
 
 Documentation :
@@ -15,7 +15,7 @@ Documentation :
 
 ## Prérequis
 
-- PHP 8.2 ou plus récent, avec l'extension `mbstring`
+- PHP 8.5 ou plus récent, avec l'extension `mbstring`
 - Node.js **24 LTS** et npm (version dans `front/.nvmrc` : `nvm use` dans `front/`)
 
 ## Installation

@@ -3,9 +3,9 @@
 Date : 11 novembre 2026 — périmètre : `api/`, `router.php`, `front/`, environnement local (PHP 8.2.35, Node 22.12.0,
 npm 10.9.0).
 
-**Suivi** — 11/11/2026 : mises à jour de Node (24 LTS), React 19, Recharts 3 et TypeScript 7 faites ; Dependabot et
-CI GitHub Actions en place (détail au §2, état au §4). Restent : PHP 8.5, les failles V1 à V9, et les trois paquets de
-build qui attendent le délai de 14 jours.
+**Suivi** — 11/11/2026 : mises à jour de PHP (8.5), Node (24 LTS), React 19, Recharts 3 et TypeScript 7 faites ;
+Dependabot et CI GitHub Actions en place (détail au §2, état au §4). Restent : les failles V1 à V9, et les trois paquets
+de build qui attendent le délai de 14 jours.
 
 ## Synthèse
 
@@ -126,7 +126,7 @@ constaté). **Correctif** : `umask(0077)` au démarrage de l'API, ou `chmod 0600
 
 | Outil | Version | État au 11/11/2026 | Action |
 |---|---|---|---|
-| PHP | 8.2.35 | Correctifs de **sécurité uniquement jusqu'au 31/12/2026** — fin de vie dans 7 semaines | ⏳ **Urgent** : passage en **8.5** décidé (sécurité jusqu'à fin 2029), installation en attente ; la CI tourne déjà en 8.5 |
+| PHP | 8.2.35 → **8.5.12** | 8.2 : sécurité uniquement jusqu'au 31/12/2026 ; 8.5 : sécurité jusqu'à fin 2029 | ✅ Fait (dépôt Ondřej Surý) : lint sans avertissement, 78 tests réussis, routes de l'API vérifiées ; la CI tourne aussi en 8.5 |
 | Node.js | 22.12.0 → **24.22.2** | 24 LTS, maintenue jusqu'à avril 2028 | ✅ Fait (`front/.nvmrc`, `engines`) |
 | npm | 10.9.0 → **11.19.1** | Fourni avec Node 24 | ✅ Fait |
 
@@ -180,7 +180,7 @@ protection contre la force brute sans écrire de code d'authentification ; il re
 
 ### Étape 2 — Hébergement et serveur web
 
-- VPS ou hébergement PHP avec PHP-FPM 8.4+, derrière **Caddy** (HTTPS Let's Encrypt automatique) ou Nginx + Certbot.
+- VPS ou hébergement PHP avec PHP-FPM 8.5+, derrière **Caddy** (HTTPS Let's Encrypt automatique) ou Nginx + Certbot.
 - Racine web = `front/dist` uniquement ; `/api/*` routé vers `api/index.php` ; `data/`, `api/src`, `api/tests`,
   `PROMPT.md`, `.git` **hors** de la racine web.
 - HTTPS obligatoire, redirection HTTP → HTTPS, HSTS.
@@ -255,7 +255,7 @@ protection contre la force brute sans écrire de code d'authentification ; il re
 |---|---|---|---|
 | Immédiat | Corriger V1 (CSRF) et V2 (Host), même en local | ~1 h | À faire |
 | Immédiat | Mettre à jour `vite`, `@vitejs/plugin-react`, `vitest` | 15 min | ⏳ Versions publiées il y a moins de 14 jours : via Dependabot vers le 25/11/2026 |
-| Avant le 31/12/2026 | PHP 8.2 → 8.5 | 30 min + tests | ⏳ En attente de l'installation (`sudo apt install php8.5-cli php8.5-mbstring`) |
+| Avant le 31/12/2026 | PHP 8.2 → 8.5 | 30 min + tests | ✅ Fait le 11/11/2026 (PHP 8.5.12) |
 | Court terme | V3, V9 | 1 h | À faire |
 | Court terme | Node 22.12 → 24.22.2 LTS | 15 min | ✅ Fait le 11/11/2026 |
 | Avant mise en ligne | Étapes 1 à 8 (ou VPN / proxy d'identité + V1–V4, V9) | 2 à 5 jours selon le modèle choisi | À faire |
