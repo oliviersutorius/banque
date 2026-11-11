@@ -32,6 +32,11 @@ export interface MoisApi extends FichierMois {
   analyse: { type_operation: string; marchand: string }[];
 }
 
+/** Un élément de GET /api/a-trier : les lignes « À catégoriser » d'un mois et leur position dans le mois */
+export interface MoisATrier extends MoisApi {
+  index: number[];
+}
+
 /** Réponse de GET /api/annee/{YYYY} : les mois enregistrés de l'année */
 export interface AnneeApi {
   année: string;

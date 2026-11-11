@@ -172,6 +172,25 @@ $router->add('GET', '/api/annee/{annee:\d{4}}', static fn (array $p): array => [
         array_values(array_filter($months->months(), static fn (string $m): bool => str_starts_with($m, $p['annee']))),
     ),
 ]);
+// Lignes encore « À catégoriser » de tous les mois, au même format que GET /api/mois/{YYYYMM}
+// (index = position dans le mois, pour la recatégorisation par PATCH)
+$router->add('GET', '/api/a-trier', static function () use ($months, $normalizer): array {
+    $result = [];
+    foreach ($months->months() as $month) {
+        $all = monthResponse($month, $months->lines($month), $normalizer);
+        $indexes = array_keys(array_filter($all['lignes'], [MonthLine::class, 'isUncategorized']));
+        if ($indexes !== []) {
+            $result[] = [
+                'mois' => $month,
+                'index' => $indexes,
+                'lignes' => array_map(static fn (int $i): array => $all['lignes'][$i], $indexes),
+                'analyse' => array_map(static fn (int $i): array => $all['analyse'][$i], $indexes),
+            ];
+        }
+    }
+
+    return $result;
+});
 
 $router->add('GET', '/api/categories', static fn (): array => $json->read($storage->categoriesFile()));
 // Modifications : { action: ajouter | icone | renommer | supprimer, sens, chemin, nom?, icone?, sous_catégorie?, remplacement? }

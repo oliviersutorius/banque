@@ -60,9 +60,10 @@ BANQUE_DATA_DIR=/tmp/banque-essai php -S localhost:8001 router.php
    aux lignes similaires. Rien n'est écrit avant « Importer ».
 2. **Mois** et **Année** : totaux, graphiques en bâtons ou en anneau, tableau (matrice catégories × mois pour l'année).
    Un clic sur une catégorie affiche son détail ; chaque ligne peut être recatégorisée.
-3. **Catégories** : ajouter, renommer (partout), supprimer (avec une catégorie de remplacement), changer l'icône.
-4. **Règles** : tester un libellé, créer, modifier, supprimer.
-5. **Paramètres** : charte graphique (Guimauve, Sauge & Lin, Nuit Lavande).
+3. **À trier** : toutes les lignes encore « À catégoriser », tous mois confondus ; le badge du menu en donne le nombre.
+4. **Catégories** : ajouter, renommer (partout), supprimer (avec une catégorie de remplacement), changer l'icône.
+5. **Règles** : tester un libellé, créer, modifier, supprimer.
+6. **Paramètres** : charte graphique (Guimauve, Sauge & Lin, Nuit Lavande).
 
 Les fichiers JSON sont écrits de façon atomique ; avant chaque modification, une copie horodatée est gardée dans
 `data/sauvegardes/` (les 20 dernières par fichier).
@@ -76,6 +77,7 @@ GET    /api/mois                           mois disponibles
 GET    /api/mois/{YYYYMM}                  contenu d'un mois (+ libellés analysés)
 PATCH  /api/mois/{YYYYMM}/lignes/{index}   { date, libelle, catégorie, autres? } → recatégorisation
 GET    /api/annee/{YYYY}                   mois enregistrés de l'année
+GET    /api/a-trier                        lignes « À catégoriser » de tous les mois (avec leur index)
 GET    /api/categories                     liste des catégories
 PUT    /api/categories                     { action: ajouter | icone | renommer | supprimer, … }
 POST   /api/categories/usage               lignes et règles qui utilisent une catégorie

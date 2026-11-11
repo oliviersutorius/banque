@@ -37,7 +37,7 @@ export default function YearPage() {
     getAnnee(annee).then(setDonnees, (e: Error) => setErreur(e.message));
   }, [annee, annees]);
 
-  const lignes: LigneVue[] = useMemo(() => donnees?.mois.flatMap(versLignesVue) ?? [], [donnees]);
+  const lignes: LigneVue[] = useMemo(() => donnees?.mois.flatMap((m) => versLignesVue(m)) ?? [], [donnees]);
   const enregistres = useMemo(() => new Set(donnees?.mois.map((m) => m.mois)), [donnees]);
   const recat = useRecategorisation(lignes, 'de cette année', (resultats) =>
     setDonnees((d) => d && { ...d, mois: d.mois.map((m) => resultats.find((r) => r.mois === m.mois) ?? m) }),

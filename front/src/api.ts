@@ -7,6 +7,7 @@ import type {
   Categorie,
   LigneAImporter,
   MoisApi,
+  MoisATrier,
   Regle,
   RegleSaisie,
   ResultatApprentissage,
@@ -41,6 +42,15 @@ export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 const post = <T>(path: string, body: unknown) => api<T>(path, { method: 'POST', body: JSON.stringify(body) });
 
+/** Événement émis après chaque écriture qui peut changer les lignes « À catégoriser » (badge « À trier ») */
+export const EVENEMENT_DONNEES = 'mes-comptes:donnees';
+
+async function ecriture<T>(requete: Promise<T>): Promise<T> {
+  const resultat = await requete;
+  window.dispatchEvent(new Event(EVENEMENT_DONNEES));
+  return resultat;
+}
+
 export interface Sante {
   statut: string;
   php: string;
@@ -53,6 +63,7 @@ export const getRegles = () => api<Regle[]>('/regles');
 export const getMoisDisponibles = () => api<string[]>('/mois');
 export const getMois = (mois: string) => api<MoisApi>(`/mois/${mois}`);
 export const getAnnee = (annee: string) => api<AnneeApi>(`/annee/${annee}`);
+export const getATrier = () => api<MoisATrier[]>('/a-trier');
 
 export interface LigneVisee {
   index: number;
@@ -62,10 +73,12 @@ export interface LigneVisee {
 
 /** Recatégorise une ligne et, en une seule écriture, les lignes similaires du même mois. */
 export const recategoriser = (mois: string, ligne: LigneVisee, catégorie: Categorie, autres: LigneVisee[] = []) =>
-  api<MoisApi>(`/mois/${mois}/lignes/${ligne.index}`, {
-    method: 'PATCH',
-    body: JSON.stringify({ date: ligne.date, libelle: ligne.libelle, catégorie, autres }),
-  });
+  ecriture(
+    api<MoisApi>(`/mois/${mois}/lignes/${ligne.index}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ date: ligne.date, libelle: ligne.libelle, catégorie, autres }),
+    }),
+  );
 
 export function previewImport(fichier: File): Promise<ApercuImport> {
   const form = new FormData();
@@ -73,10 +86,10 @@ export function previewImport(fichier: File): Promise<ApercuImport> {
   return api<ApercuImport>('/import/preview', { method: 'POST', body: form });
 }
 
-export const confirmImport = (lignes: LigneAImporter[]) => post<ResultatImport>('/import/confirm', { lignes });
+export const confirmImport = (lignes: LigneAImporter[]) => ecriture(post<ResultatImport>('/import/confirm', { lignes }));
 
 export const apprendreRegle = (règle: RegleSaisie, appliquer_aux_mois: boolean) =>
-  post<ResultatApprentissage>('/regles', { règle, appliquer_aux_mois });
+  ecriture(post<ResultatApprentissage>('/regles', { règle, appliquer_aux_mois }));
 
 export const correspondances = (règle: RegleSaisie, lignes: { libelle: string; sens: Sens }[]) =>
   post<{ correspondances: boolean[] }>('/regles/correspondances', { règle, lignes });
@@ -95,7 +108,7 @@ export interface Usage {
 }
 
 export const modifierCategories = (action: ActionCategorie) =>
-  api<{ catégories: Categories; modifiés: Usage }>('/categories', { method: 'PUT', body: JSON.stringify(action) });
+  ecriture(api<{ catégories: Categories; modifiés: Usage }>('/categories', { method: 'PUT', body: JSON.stringify(action) }));
 
 export const usageCategorie = (sens: Sens, chemin: string[]) => post<Usage>('/categories/usage', { sens, chemin });
 

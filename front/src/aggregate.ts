@@ -29,12 +29,15 @@ export function sensDe(ligne: LigneMois): Sens {
   return 'dépense' in ligne ? 'dépense' : 'revenu';
 }
 
-export function versLignesVue(mois: MoisApi): LigneVue[] {
+/**
+ * @param positions position de chaque ligne dans son mois, quand `mois.lignes` n'en est qu'une partie (lignes à trier)
+ */
+export function versLignesVue(mois: MoisApi, positions?: number[]): LigneVue[] {
   return mois.lignes.map((l, index) => {
     const sens = sensDe(l);
     return {
       mois: mois.mois,
-      index,
+      index: positions?.[index] ?? index,
       date: l.date,
       libelle: l.libelle,
       sens,

@@ -98,3 +98,14 @@ describe('matrice', () => {
     expect(m.total).toBe(5000);
   });
 });
+
+describe('versLignesVue', () => {
+  it("garde la position réelle des lignes dans le mois quand on n'en reçoit qu'une partie", () => {
+    const partiel: MoisApi = { ...mois, lignes: [mois.lignes[0]!, mois.lignes[3]!], analyse: [] };
+
+    expect(versLignesVue(partiel, [0, 3]).map((l) => [l.index, l.libelle])).toEqual([
+      [0, 'MTP PUTEAUX'],
+      [3, 'FREE MOBILE'],
+    ]);
+  });
+});
