@@ -4,10 +4,14 @@ import { A_CATEGORISER, libelleCategorie, regle as construireRegle } from '../ca
 import CategoryPicker from '../components/CategoryPicker';
 import CategorySelect from '../components/CategorySelect';
 import Modal from '../components/Modal';
+import Pagination from '../components/Pagination';
 import { TYPES_OPERATION } from '../operationTypes';
+import { paginer } from '../pagination';
 import type { Categorie, Categories, Regle, Sens } from '../types';
 
 type Filtre = 'toutes' | 'apprise' | 'initiale';
+
+const REGLES_PAR_PAGE = 25;
 
 const categorieDe = (r: Regle): Categorie =>
   r.type === 'dépense' ? { catégorie1: r.catégorie1 ?? '', catégorie2: r.catégorie2 ?? '' } : (r.catégorie ?? '');
@@ -17,6 +21,7 @@ export default function RulesPage() {
   const [categories, setCategories] = useState<Categories | null>(null);
   const [filtre, setFiltre] = useState<Filtre>('toutes');
   const [recherche, setRecherche] = useState('');
+  const [page, setPage] = useState(1);
   const [edition, setEdition] = useState<{ index: number | null; regle: Regle } | null>(null);
   const [suppression, setSuppression] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
@@ -35,6 +40,7 @@ export default function RulesPage() {
       .filter(({ r }) => filtre === 'toutes' || r.origine === filtre)
       .filter(({ r }) => texte === '' || r.motif.toUpperCase().includes(texte) || libelleCategorie(categorieDe(r)).toUpperCase().includes(texte));
   }, [regles, filtre, recherche]);
+  const pagination = paginer(visibles, page, REGLES_PAR_PAGE);
 
   if (!regles || !categories) {
     return erreur ? <p className="card error">{erreur}</p> : <p className="muted">Chargement…</p>;
@@ -77,10 +83,16 @@ export default function RulesPage() {
           </button>
         </header>
         <div className="filters">
-          <input className="search" placeholder="Rechercher un motif ou une catégorie" value={recherche} onChange={(e) => setRecherche(e.target.value)} />
+          <input className="search" placeholder="Rechercher un motif ou une catégorie" value={recherche} onChange={(e) => {
+              setRecherche(e.target.value);
+              setPage(1);
+            }} />
           <div className="switch" role="tablist">
             {(['toutes', 'apprise', 'initiale'] as const).map((f) => (
-              <button key={f} type="button" role="tab" aria-selected={filtre === f} className={filtre === f ? 'active' : ''} onClick={() => setFiltre(f)}>
+              <button key={f} type="button" role="tab" aria-selected={filtre === f} className={filtre === f ? 'active' : ''} onClick={() => {
+                  setFiltre(f);
+                  setPage(1);
+                }}>
                 {f === 'toutes' ? 'Toutes' : f === 'apprise' ? 'Apprises' : 'Initiales'}
               </button>
             ))}
@@ -99,7 +111,7 @@ export default function RulesPage() {
               </tr>
             </thead>
             <tbody>
-              {visibles.map(({ r, index }) => (
+              {pagination.elements.map(({ r, index }) => (
                 <tr key={index}>
                   <td className="mono-soft">
                     {r.motif}
@@ -129,6 +141,12 @@ export default function RulesPage() {
             </tbody>
           </table>
         </div>
+        {visibles.length > 0 && (
+          <p className="muted small">
+            Règles {pagination.debut} à {pagination.fin} sur {visibles.length}
+          </p>
+        )}
+        <Pagination page={pagination.page} nbPages={pagination.nbPages} onChange={setPage} />
       </section>
 
       {edition && (
