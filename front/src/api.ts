@@ -1,5 +1,6 @@
 /** Client HTTP de l'API PHP. Toutes les routes sont sous /api. */
 
+import { EVENEMENT_SESSION, enteteCsrf, estRouteDeConnexion, memoriserSession, oublierSession, type EtatSession } from './auth';
 import type {
   AnneeApi,
   ApercuImport,
@@ -27,11 +28,18 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch('/api' + path, {
-    ...init,
-    headers: init.body instanceof FormData ? init.headers : { 'Content-Type': 'application/json', ...init.headers },
-  });
+  const headers = {
+    ...(init.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
+    ...enteteCsrf(init.method),
+    ...(init.headers as Record<string, string> | undefined),
+  };
+  const response = await fetch('/api' + path, { ...init, headers, credentials: 'same-origin' });
   const body: unknown = await response.json().catch(() => null);
+  if (response.status === 401 && !estRouteDeConnexion(path)) {
+    // Session expirée ou fermée ailleurs : App affiche la page de connexion
+    oublierSession();
+    window.dispatchEvent(new Event(EVENEMENT_SESSION));
+  }
   if (!response.ok) {
     const details = (body ?? {}) as Record<string, unknown>;
     const message = typeof details.erreur === 'string' ? details.erreur : `Erreur HTTP ${response.status}`;
@@ -53,7 +61,18 @@ async function ecriture<T>(requete: Promise<T>): Promise<T> {
 
 export interface Sante {
   statut: string;
-  php: string;
+}
+
+export const getSession = () => api<EtatSession>('/session').then(memoriserSession);
+export const connexion = (identifiant: string, mot_de_passe: string) =>
+  post<EtatSession>('/connexion', { identifiant, mot_de_passe }).then(memoriserSession);
+export const connexionCode = (code: string) => post<EtatSession>('/connexion/code', { code }).then(memoriserSession);
+export async function deconnexion(): Promise<void> {
+  try {
+    await api('/deconnexion', { method: 'POST' });
+  } finally {
+    oublierSession();
+  }
 }
 
 export const getSante = () => api<Sante>('/sante');

@@ -1178,3 +1178,68 @@ h3 {
   justify-content: center;
   margin-top: 16px;
 }
+
+/* Connexion */
+
+.login {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 380px;
+}
+
+.login-card h1 {
+  font-size: 1.4rem;
+  margin: 8px 0 4px;
+}
+
+.login-brand {
+  margin: 0;
+  color: var(--accent);
+}
+
+.login-code {
+  font-size: 1.5rem;
+  letter-spacing: 0.4em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.login-submit {
+  width: 100%;
+  margin-top: 8px;
+}
+
+.login-command {
+  padding: 10px 14px;
+  border-radius: var(--radius-small);
+  background: var(--bg);
+  overflow-x: auto;
+}
+
+.link-button {
+  display: block;
+  margin: 16px auto 0;
+  font: inherit;
+  font-size: 0.9rem;
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.link-button:hover {
+  color: var(--text);
+}
+
+.btn.logout {
+  padding: 6px 14px;
+  font-size: 0.85rem;
+}

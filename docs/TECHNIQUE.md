@@ -58,15 +58,21 @@ développement : Vite (:5173) sert front/src et relaie /api vers :8000
 | Fichier | Rôle |
 |---|---|
 | `types.ts` | Types partagés : formats JSON de `data/` et réponses de l'API |
-| `api.ts` | Client HTTP ; émet l'événement `mes-comptes:donnees` après chaque écriture (badge « À trier ») |
+| `api.ts` | Client HTTP ; ajoute `X-CSRF-Token` aux écritures ; émet `mes-comptes:donnees` après chaque écriture (badge « À trier ») et `mes-comptes:session` sur un 401 hors connexion (session expirée) |
+| `auth.ts` | État de session, jeton CSRF gardé en mémoire (jamais dans `localStorage`), écran à afficher (testés) |
 | `aggregate.ts` | Totaux, regroupements par catégorie, matrice annuelle, ordre chronologique (testés) |
 | `importLogic.ts` | Ordre d'affichage et contenu envoyé à la confirmation d'import (testés) |
 | `format.ts` | Centimes ↔ texte, format français `1 234,56 €` (testés) |
 | `categories.ts`, `colors.ts`, `months.ts`, `operationTypes.ts`, `theme.ts` | Aides d'affichage |
 | `useRecategorisation.tsx` | Recatégorisation + fenêtre d'apprentissage, partagée par Mois, Année et À trier |
-| `pages/` | Une page par onglet |
+| `pages/` | Une page par onglet, plus `LoginPage` (connexion en deux temps) |
 | `components/` | Blocs de graphiques, tableaux, matrice, fenêtres, sélecteurs de catégorie |
 | `styles.css` | Styles ; les trois chartes sont des jeux de variables CSS sur `[data-theme]` |
+| `public/theme-init.js` | Applique la dernière charte avant le premier affichage ; fichier séparé car la CSP interdit les scripts en ligne |
+
+`App.tsx` appelle `GET /api/session` au démarrage et à chaque événement `mes-comptes:session` : tant que l'étape
+n'est pas `connecte`, seule `LoginPage` est affichée et aucune autre route n'est appelée. L'URL est conservée : après
+une reconnexion, on retrouve la page où l'on était.
 
 ## Formats des données (`data/`)
 
@@ -385,7 +391,7 @@ passe, ni code, ni donnée bancaire.
 | Commande | Contenu |
 |---|---|
 | `php api/tests/run.php [filtre]` | Lanceur maison (`api/tests/run.php`, `TestCase.php`) : parseur, normalisation, montants, règles et priorités, catégoriseur, import et doublons par occurrences, apprentissage, mois, catégories, JSON atomique, routeur, `RequestGuard` ; authentification : TOTP (vecteurs de la RFC 6238), chiffrement, compte, limitation des tentatives, conditions de la double authentification |
-| `cd front && npm test` | Vitest : formatage, agrégations (totaux, regroupements, matrice), logique d'import |
+| `cd front && npm test` | Vitest : formatage, agrégations (totaux, regroupements, matrice), logique d'import, pagination ; connexion (`auth.test.ts`) : écran affiché, jeton CSRF sur les écritures seulement, 401 → session expirée, déconnexion |
 
 Les tests qui lisent `exemple.csv` ou `csv/` (non versionnés, données réelles) sont marqués **ignorés** si ces
 fichiers sont absents. Les autres utilisent des données inventées et des dossiers temporaires.
