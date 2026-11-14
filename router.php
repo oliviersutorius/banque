@@ -6,9 +6,23 @@
  * - /api/... est délégué à api/index.php
  * - les fichiers existants de front/dist sont servis tels quels
  * - toute autre URL renvoie front/dist/index.html (routage côté React)
+ *
+ * Lit aussi .env.local (variables BANQUE_* du poste local, voir .env.local.example). Ce fichier n'a d'effet qu'ici :
+ * en ligne, le serveur web appelle directement api/index.php.
  */
 
 declare(strict_types=1);
+
+require_once __DIR__ . '/api/bootstrap.php';
+
+try {
+    Banque\EnvFile::load(__DIR__ . '/.env.local');
+} catch (RuntimeException $e) {
+    http_response_code(500);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo $e->getMessage(), "\n";
+    return true;
+}
 
 $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
 $path = is_string($path) ? rawurldecode($path) : '/';

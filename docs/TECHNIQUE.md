@@ -52,6 +52,7 @@ en ligne : navigateur ──HTTPS──► Caddy ──► front/dist/ (fichiers
 | `SecretBox` | Chiffrement du secret TOTP avec libsodium ; clé lue dans `BANQUE_CLE` ou `BANQUE_CLE_FICHIER` |
 | `LoginThrottle` | Limitation des tentatives de connexion (`tentatives.json`) |
 | `AuthConfig` | Poste local ou non, double authentification exigée ou non (`BANQUE_TOTP`) |
+| `EnvFile` | Lecture de `.env.local` par `router.php` (poste local uniquement) |
 | `Auth` | Connexion en deux temps, expiration de session, jeton CSRF, contrôle avant chaque route protégée |
 | `SessionStore`, `PhpSession` | Données de session ; sessions PHP natives durcies (cookie, mode strict, `data/sessions/`) |
 | `AuditLog` | Journal des connexions (`data/journal/connexions.log`) |
@@ -235,6 +236,12 @@ L'API fixe `umask(0077)` au démarrage : les fichiers qu'elle crée ne sont lisi
 | `BANQUE_CLE` | Clé de chiffrement du secret TOTP, en base64 (`php api/bin/cle.php`) | aucune |
 | `BANQUE_CLE_FICHIER` | Fichier contenant cette clé, à préférer à `BANQUE_CLE` sur le serveur (`/etc/banque/cle`, 0400) | aucun |
 | `BANQUE_TOTP` | `desactive` retire la double authentification, **uniquement sur le poste local** (voir « Authentification ») | `obligatoire` |
+
+Sur le poste local, ces variables peuvent être écrites dans **`.env.local`** à la racine (modèle :
+`.env.local.example`, fichier ignoré par git). Il est lu par `router.php` seulement (`EnvFile::load`), donc par
+`php -S` et par le proxy Vite, jamais en ligne où Caddy appelle `api/index.php` directement. Format `NOM=valeur`,
+commentaires `#`, guillemets facultatifs ; seules les variables `BANQUE_*` sont acceptées (sinon erreur 500 avec la
+ligne en cause) ; une variable déjà définie dans le shell est prioritaire. Les scripts `api/bin/` ne le lisent pas.
 
 ## API
 

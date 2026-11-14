@@ -5,6 +5,9 @@
 /csv/
 /exemple.csv
 
+# Variables du poste local (voir .env.local.example)
+/.env.local
+
 # Front
 /front/node_modules/
 /front/dist/

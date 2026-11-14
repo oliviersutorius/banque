@@ -55,8 +55,8 @@ Il faut saisir le code dans les 5 minutes qui suivent le mot de passe, sinon tou
 
 ### Sur le poste local : mot de passe seul
 
-Sur votre poste, la double authentification peut être retirée en lançant le serveur avec `BANQUE_TOTP=desactive`
-(voir le README) : le mot de passe suffit alors. Ce réglage n'a **aucun effet** sur le site en ligne : il n'est
+Sur votre poste, la double authentification peut être retirée avec le réglage `BANQUE_TOTP=desactive`, écrit une
+fois pour toutes dans le fichier `.env.local` (voir le README) : le mot de passe suffit alors. Ce réglage n'a **aucun effet** sur le site en ligne : il n'est
 appliqué que si le site est ouvert à l'adresse `localhost` (ou `127.0.0.1`), sans HTTPS, depuis la machine elle-même.
 En ligne, le code est toujours demandé, et un compte créé sans double authentification ne peut pas se connecter.
 

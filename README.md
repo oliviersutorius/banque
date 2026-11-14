@@ -46,10 +46,20 @@ Autres commandes : `mot-de-passe`, `totp-reset`, `debloquer` (voir [FONCTIONNEL.
 
 ## Lancement
 
-Avec un compte créé par `--sans-totp`, lancer le serveur avec `BANQUE_TOTP=desactive` : le mot de passe suffit.
+Avec un compte créé par `--sans-totp`, le serveur doit tourner avec `BANQUE_TOTP=desactive` : le mot de passe
+suffit. Le plus simple est de l'écrire une fois pour toutes dans `.env.local` (ignoré par git), lu au démarrage par
+`router.php` :
+
+```bash
+cp .env.local.example .env.local
+```
+
 Ce réglage ne fonctionne que sur `localhost` en HTTP depuis la machine elle-même ; il n'a aucun effet en ligne.
-Avec un compte à double authentification, remplacer `BANQUE_TOTP=desactive` par
-`BANQUE_CLE_FICHIER=~/.config/banque-cle` dans les commandes ci-dessous.
+Avec un compte à double authentification, mettre plutôt `BANQUE_CLE_FICHIER=/home/<vous>/.config/banque-cle` dans
+`.env.local`. Une variable passée dans la commande (`BANQUE_TOTP=… php -S …`) reste prioritaire.
+
+`.env.local` ne concerne que le serveur : les scripts `api/bin/` ne le lisent pas (passer `BANQUE_CLE_FICHIER=…` ou
+`BANQUE_DATA_DIR=…` devant la commande).
 
 ### Utilisation courante
 
@@ -57,7 +67,7 @@ Construire le front une fois (et après chaque mise à jour du code), puis lance
 l'API et le front :
 
 ```bash
-cd front && npm run build && cd .. && BANQUE_TOTP=desactive php -S localhost:8000 router.php
+cd front && npm run build && cd .. && php -S localhost:8000 router.php
 ```
 
 Ouvrir <http://localhost:8000>.
@@ -68,7 +78,7 @@ Dans deux terminaux :
 
 ```bash
 # Terminal 1 : l'API
-BANQUE_TOTP=desactive php -S localhost:8000 router.php
+php -S localhost:8000 router.php
 
 # Terminal 2 : le front avec rechargement à chaud
 cd front && npm run dev
@@ -88,7 +98,7 @@ mkdir -p /tmp/banque-essai && cp data/categories.json data/regles.json /tmp/banq
 # Un compte pour cette instance
 BANQUE_DATA_DIR=/tmp/banque-essai php api/bin/compte.php init --sans-totp
 
-BANQUE_DATA_DIR=/tmp/banque-essai BANQUE_TOTP=desactive php -S localhost:8001 router.php
+BANQUE_DATA_DIR=/tmp/banque-essai php -S localhost:8001 router.php
 ```
 
 Ouvrir <http://localhost:8001>. Pour recommencer : arrêter le serveur et supprimer `/tmp/banque-essai`.
@@ -141,7 +151,8 @@ data/              données : mois/, categories.json, regles.json, parametres.js
                    sauvegardes/, sessions/, journal/ (non versionné)
 docs/              documentation fonctionnelle et technique
 deploy/            exemples de configuration pour la mise en ligne (Caddy, PHP-FPM, logrotate)
-router.php         point d'entrée de « php -S »
+router.php         point d'entrée de « php -S » ; lit .env.local
+.env.local.example modèle de .env.local (variables du poste local, non versionné)
 exemple.csv        extrait de relevé servant aux tests (non versionné)
 csv/               relevés réels (non versionné)
 ```
