@@ -17,7 +17,7 @@ final class Storage
 
     public function ensureDirectories(): void
     {
-        foreach ([$this->root, $this->monthsDir(), $this->backupsDir()] as $dir) {
+        foreach ([$this->root, $this->monthsDir(), $this->backupsDir(), $this->sessionsDir(), $this->journalDir()] as $dir) {
             if (!is_dir($dir) && !mkdir($dir, 0700, true) && !is_dir($dir)) {
                 throw new RuntimeException('Impossible de créer le dossier ' . $dir);
             }
@@ -62,5 +62,25 @@ final class Storage
     public function settingsFile(): string
     {
         return $this->root . '/parametres.json';
+    }
+
+    public function accountFile(): string
+    {
+        return $this->root . '/compte.json';
+    }
+
+    public function attemptsFile(): string
+    {
+        return $this->root . '/tentatives.json';
+    }
+
+    public function sessionsDir(): string
+    {
+        return $this->root . '/sessions';
+    }
+
+    public function journalDir(): string
+    {
+        return $this->root . '/journal';
     }
 }

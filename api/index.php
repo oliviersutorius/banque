@@ -8,6 +8,13 @@ declare(strict_types=1);
 
 require __DIR__ . '/bootstrap.php';
 
+// Fichiers et dossiers créés lisibles par le seul utilisateur du serveur (données bancaires, compte, sessions)
+umask(0077);
+
+use Banque\Account;
+use Banque\AuditLog;
+use Banque\Auth;
+use Banque\AuthConfig;
 use Banque\CategoryCatalog;
 use Banque\CategoryManager;
 use Banque\Categorizer;
@@ -20,15 +27,20 @@ use Banque\Importer;
 use Banque\JsonFile;
 use Banque\LabelNormalizer;
 use Banque\LineConflictException;
+use Banque\LoginThrottle;
 use Banque\MonthLine;
 use Banque\MonthRepository;
+use Banque\PhpSession;
 use Banque\RequestGuard;
 use Banque\Router;
 use Banque\RuleRepository;
+use Banque\SecretBox;
 use Banque\Storage;
 
 const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 const MAX_BODY_BYTES = 10 * 1024 * 1024;
+/** Routes accessibles sans être connecté (« MÉTHODE /chemin ») */
+const PUBLIC_ROUTES = ['GET /api/session', 'POST /api/connexion', 'POST /api/connexion/code', 'POST /api/deconnexion'];
 
 function sendJson(int $status, mixed $body): void
 {
@@ -120,8 +132,48 @@ $rules = new RuleRepository($storage->rulesFile(), $json);
 $categoryManager = new CategoryManager($storage->categoriesFile(), $json, $months, $rules);
 $catalog = static fn (): CategoryCatalog => CategoryCatalog::fromArray($json->read($storage->categoriesFile()));
 $router = new Router();
+$now = time();
+$ip = is_string($_SERVER['REMOTE_ADDR'] ?? null) ? $_SERVER['REMOTE_ADDR'] : '';
+// Créé dans le try : une clé de chiffrement invalide doit donner une erreur 500 propre
+$auth = static function () use ($storage, $json): Auth {
+    static $auth = null;
+    if ($auth === null) {
+        $config = AuthConfig::fromServer($_SERVER, getenv('BANQUE_TOTP'));
+        $auth = new Auth(
+            new PhpSession($storage->sessionsDir(), $config->local(), Auth::ABSOLUTE_SECONDS),
+            new Account($storage->accountFile(), $json, SecretBox::fromEnvironment()),
+            new LoginThrottle($storage->attemptsFile(), $json),
+            $config,
+            new AuditLog($storage->journalDir() . '/connexions.log'),
+        );
+    }
 
-$router->add('GET', '/api/sante', static fn (): array => ['statut' => 'ok', 'php' => PHP_VERSION]);
+    return $auth;
+};
+
+$router->add('GET', '/api/sante', static fn (): array => ['statut' => 'ok']);
+
+$router->add('GET', '/api/session', static fn (): array => $auth()->status($now));
+$router->add('POST', '/api/connexion', static function () use ($auth, $ip, $now): array {
+    $body = jsonBody();
+
+    return $auth()->loginWithPassword(
+        is_string($body['identifiant'] ?? null) ? $body['identifiant'] : '',
+        is_string($body['mot_de_passe'] ?? null) ? $body['mot_de_passe'] : '',
+        $ip,
+        $now,
+    );
+});
+$router->add('POST', '/api/connexion/code', static function () use ($auth, $ip, $now): array {
+    $body = jsonBody();
+
+    return $auth()->loginWithCode(is_string($body['code'] ?? null) ? $body['code'] : '', $ip, $now);
+});
+$router->add('POST', '/api/deconnexion', static function () use ($auth, $ip, $now): array {
+    $auth()->logout($ip, $now);
+
+    return ['connecte' => false];
+});
 
 $router->add('POST', '/api/import/preview', static function () use ($rules, $catalog, $normalizer, $months): array {
     $categories = $catalog();
@@ -303,7 +355,13 @@ try {
     $storage->ensureDirectories();
     $storage->initializeDefaults($json);
     $path = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH);
-    $result = $router->dispatch($_SERVER['REQUEST_METHOD'] ?? 'GET', is_string($path) ? rtrim($path, '/') : '');
+    $path = is_string($path) ? rtrim($path, '/') : '';
+    $method = strtoupper(is_string($_SERVER['REQUEST_METHOD'] ?? null) ? $_SERVER['REQUEST_METHOD'] : 'GET');
+    if (!in_array($method . ' ' . $path, PUBLIC_ROUTES, true)) {
+        $auth()->requireUser($now);
+        $auth()->checkCsrf($_SERVER);
+    }
+    $result = $router->dispatch($method, $path);
     sendJson(200, $result);
 } catch (HttpException $e) {
     sendJson($e->status(), ['erreur' => $e->getMessage()] + $e->details());
@@ -312,6 +370,8 @@ try {
 } catch (InvalidArgumentException | CsvFormatException $e) {
     sendJson(422, ['erreur' => $e->getMessage()]);
 } catch (Throwable $e) {
-    error_log((string) $e);
-    sendJson(500, ['erreur' => 'Erreur interne : ' . $e->getMessage()]);
+    // Le détail (chemins, messages internes) reste dans le journal du serveur ; le client reçoit une référence
+    $reference = bin2hex(random_bytes(4));
+    error_log('[banque ' . $reference . '] ' . $e);
+    sendJson(500, ['erreur' => 'Erreur interne (référence ' . $reference . ')', 'reference' => $reference]);
 }

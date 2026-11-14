@@ -49,6 +49,9 @@ développement : Vite (:5173) sert front/src et relaie /api vers :8000
 | `SecretBox` | Chiffrement du secret TOTP avec libsodium ; clé lue dans `BANQUE_CLE` ou `BANQUE_CLE_FICHIER` |
 | `LoginThrottle` | Limitation des tentatives de connexion (`tentatives.json`) |
 | `AuthConfig` | Poste local ou non, double authentification exigée ou non (`BANQUE_TOTP`) |
+| `Auth` | Connexion en deux temps, expiration de session, jeton CSRF, contrôle avant chaque route protégée |
+| `SessionStore`, `PhpSession` | Données de session ; sessions PHP natives durcies (cookie, mode strict, `data/sessions/`) |
+| `AuditLog` | Journal des connexions (`data/journal/connexions.log`) |
 
 ### Front (`front/src/`)
 
@@ -200,14 +203,29 @@ oublié. Ce fichier est réécrit sans sauvegarde.
 
 ### Initialisation
 
-Au premier appel de l'API, `Storage` crée `data/`, `data/mois/`, `data/sauvegardes/` et, s'ils n'existent pas,
+Au premier appel de l'API, `Storage` crée `data/`, `data/mois/`, `data/sauvegardes/`, `data/sessions/`,
+`data/journal/` (tous en 0700) et, s'ils n'existent pas,
 `categories.json`, `regles.json` (47 règles initiales) et `parametres.json` à partir de `DefaultData`. Modifier
 `DefaultData` n'a pas d'effet sur un `data/` existant.
 
 `BANQUE_DATA_DIR` (variable d'environnement) remplace le dossier `data/` : instance d'essai, tests manuels.
 
 `BANQUE_HOTES` (variable d'environnement, noms séparés par des virgules) ajoute des noms d'hôte acceptés par l'API en
-plus de `localhost`, `127.0.0.1` et `[::1]` : à renseigner si l'application est un jour servie sous un autre nom.
+plus de `localhost`, `127.0.0.1` et `[::1]` : à renseigner avec le nom de domaine du site en ligne.
+
+L'API fixe `umask(0077)` au démarrage : les fichiers qu'elle crée ne sont lisibles que par l'utilisateur du serveur
+(0600). Un `data/` créé avant cette version peut garder des fichiers en 0664 jusqu'à leur prochaine écriture :
+`chmod -R go-rwx data` les corrige d'un coup.
+
+### Variables d'environnement
+
+| Variable | Rôle | Défaut |
+|---|---|---|
+| `BANQUE_DATA_DIR` | Dossier des données | `data/` |
+| `BANQUE_HOTES` | Noms d'hôte acceptés en plus des adresses locales | aucun |
+| `BANQUE_CLE` | Clé de chiffrement du secret TOTP, en base64 (`php api/bin/cle.php`) | aucune |
+| `BANQUE_CLE_FICHIER` | Fichier contenant cette clé, à préférer à `BANQUE_CLE` sur le serveur (`/etc/banque/cle`, 0400) | aucun |
+| `BANQUE_TOTP` | `desactive` retire la double authentification, **uniquement sur le poste local** (voir « Authentification ») | `obligatoire` |
 
 ## API
 
@@ -215,7 +233,11 @@ Toutes les réponses sont en JSON. Les erreurs ont la forme `{ "erreur": "messag
 
 | Méthode et route | Corps / paramètres | Réponse |
 |---|---|---|
-| `GET /api/sante` | | `{ statut, php }` |
+| `GET /api/session` ¹ | | `{ compte, totp, etape, csrf, identifiant }` : `etape` vaut `identifiants`, `code` ou `connecte` ; `csrf` et `identifiant` seulement une fois connecté |
+| `POST /api/connexion` ¹ | `{ identifiant, mot_de_passe }` | le nouvel état, comme `GET /api/session` |
+| `POST /api/connexion/code` ¹ | `{ code }` : code TOTP à 6 chiffres ou code de secours | le nouvel état (+ `codes_secours_restants` si un code de secours a servi) |
+| `POST /api/deconnexion` ¹ | | `{ connecte: false }` |
+| `GET /api/sante` | | `{ statut }` |
 | `POST /api/import/preview` | multipart, champ `fichier` (2 Mo max) | aperçu : `résumé`, `mois[].lignes[]` (avec `doublon`, `à_revoir`, `marchand`, `type_operation`, `motif`), `erreurs[]` — **n'écrit rien** |
 | `POST /api/import/confirm` | `{ lignes: [{ date, libelle, sens, montant, catégorie }] }` (20 000 max) | `{ ajoutées, mois: [{ mois, ajoutées, doublons }] }` |
 | `GET /api/mois` | | `["202504", …]` |
@@ -233,6 +255,9 @@ Toutes les réponses sont en JSON. Les erreurs ont la forme `{ "erreur": "messag
 | `PUT /api/regles/{index}` | `{ motif_actuel, règle }` | la règle |
 | `DELETE /api/regles/{index}?motif=…` | | `{ supprimée }` |
 | `GET /api/parametres`, `PUT /api/parametres` | `{ thème }` | les paramètres |
+
+¹ Seules routes accessibles sans être connecté. Toutes les autres exigent une session connectée (sinon **401**) et,
+pour les écritures, l'en-tête `X-CSRF-Token` (sinon **403**).
 
 `PUT /api/categories` — actions :
 
@@ -259,18 +284,65 @@ elle reçoit toutes les lignes du CSV et refait la fusion, ce qui la rend rejoua
 | Statut | Cas |
 |---|---|
 | 400 | Corps JSON absent ou mal formé, fichier manquant, paramètre invalide |
-| 403 | Hôte non autorisé, ou écriture venue d'une autre origine (`RequestGuard`) |
+| 401 | Pas connecté, session expirée, identifiants ou code faux |
+| 403 | Hôte non autorisé, écriture venue d'une autre origine (`RequestGuard`), jeton CSRF absent ou faux, double authentification exigée mais non configurée |
 | 404 | Route ou mois inconnu |
 | 405 | Méthode non autorisée |
 | 409 | Ligne ou règle modifiée entre-temps |
 | 413 | Fichier (2 Mo) ou corps (10 Mo) trop volumineux |
 | 415 | Corps JSON envoyé sans `Content-Type: application/json` |
 | 422 | Données refusées : CSV sans en-tête, catégorie inconnue, montant invalide, règle mal formée… |
-| 500 | Erreur interne (message renvoyé et journalisé) |
+| 429 | Trop de tentatives de connexion (`reessayer_dans`, en secondes) |
+| 500 | Erreur interne : le client ne reçoit qu'une référence (`{ erreur, reference }`) ; le détail est dans le journal d'erreurs de PHP, préfixé `[banque <référence>]` |
+
+## Authentification
+
+Un seul compte (`compte.json`), créé en ligne de commande : aucune route d'inscription.
+
+### Déroulement
+
+1. `POST /api/connexion` : `LoginThrottle` vérifie que l'IP et le compte ne sont pas verrouillés (429), puis
+   `Account::verifyPassword`. En cas d'échec : 401, même message que le compte existe ou non, et même durée
+   (une empreinte factice est vérifiée si l'identifiant est faux). En cas de succès, nouvel identifiant de session et
+   étape `code` (5 min pour saisir le code).
+2. `POST /api/connexion/code` : code TOTP (un pas de 30 s de tolérance de chaque côté, jamais deux fois le même) ou
+   code de secours (consommé). En cas de succès : nouvel identifiant de session, étape `connecte`, jeton CSRF
+   aléatoire (32 octets), remise à zéro des compteurs d'échecs.
+3. Avant chaque route protégée, `api/index.php` appelle `Auth::requireUser` (401 si pas connecté ou expiré ; prolonge
+   la session) puis `Auth::checkCsrf` (403 si une écriture n'a pas le bon `X-CSRF-Token`).
+
+Les échecs au mot de passe et au code comptent ensemble : 5 échecs → 15 min de verrouillage, puis 30 min, 1 h…
+(au plus 24 h), par IP et pour le compte (voir `tentatives.json`).
+
+### Session
+
+- Sessions PHP natives (`PhpSession`), fichiers dans `data/sessions/`, démarrées seulement à la connexion ou si le
+  navigateur envoie déjà un cookie.
+- Cookie `__Host-banque_session` : `Secure`, `HttpOnly`, `SameSite=Strict`, chemin `/`, sans durée (supprimé à la
+  fermeture du navigateur). Sur le poste local en HTTP, il s'appelle `banque_session` et n'a pas `Secure` (le préfixe
+  `__Host-` l'exige).
+- `session.use_strict_mode=1`, `session.use_only_cookies=1`, `session.use_trans_sid=0`.
+- Expiration : 30 min sans requête, 12 h au plus après la connexion. La déconnexion détruit la session et le cookie.
+
+### Double authentification et poste local
+
+`AuthConfig` considère une requête comme venant du **poste local** si les trois conditions sont réunies : hôte
+`localhost` / `127.0.0.1` / `[::1]`, pas de HTTPS, et client sur la boucle locale (`REMOTE_ADDR` `127.0.0.1` ou
+`::1`). Sur le serveur, Caddy sert le domaine en HTTPS et transmet l'adresse du client : ce n'est jamais le cas.
+
+- `BANQUE_TOTP=desactive` **et** poste local : le mot de passe suffit (`GET /api/session` renvoie `totp: false`).
+- Partout ailleurs, la variable est ignorée et le code est exigé. Si le compte n'a pas de secret TOTP (créé avec
+  `--sans-totp`), la connexion est refusée (403) et le refus est journalisé.
+
+### Journal des connexions
+
+`data/journal/connexions.log`, une ligne JSON par évènement : `connexion` (avec le facteur : `totp`, `secours` ou
+`mot_de_passe`), `echec` (étape `mot_de_passe` ou `code`), `verrouillage`, `deconnexion`, `refus_sans_totp`. Ni mot de
+passe, ni code, ni donnée bancaire.
 
 ## Sécurité
 
-- Usage local uniquement, sans authentification : ne pas exposer le serveur sur un réseau.
+- Authentification obligatoire pour toutes les données (voir ci-dessus).
 - Protection contre les autres sites ouverts dans le navigateur (`RequestGuard`, appelé avant toute route) :
   - **DNS rebinding** : l'API ne répond qu'aux hôtes `localhost`, `127.0.0.1` et `[::1]` (tout port), plus
     `BANQUE_HOTES` ; sinon 403 ;
@@ -279,6 +351,7 @@ elle reçoit toutes les lignes du CSV et refait la fusion, ce qui la rend rejoua
     `application/json` (415), ce qu'un autre site ne peut pas faire sans pré-vérification CORS, que l'API n'accepte pas.
 - Aucun chemin n'est construit à partir d'une saisie non contrôlée : le mois est validé (`YYYYMM`, mois 01–12) avant
   tout accès disque ; `router.php` ne sert que des fichiers situés dans `front/dist`.
+- Erreurs 500 sans détail interne pour le client ; `/api/sante` ne donne plus la version de PHP.
 - Toutes les entrées sont validées : formats de date et de montant, existence des catégories, sens, types
   d'opération, tailles.
 - Écritures atomiques avec verrou ; sauvegarde avant chaque modification.

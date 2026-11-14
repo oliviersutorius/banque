@@ -86,3 +86,35 @@ final class TempDir
         rmdir($this->path);
     }
 }
+
+/**
+ * Session en mémoire pour tester Auth sans sessions PHP (impossible une fois la sortie commencée).
+ */
+final class ArraySession implements \Banque\SessionStore
+{
+    /** @var array<string, mixed> */
+    public array $data = [];
+    public int $regenerations = 0;
+    public int $destructions = 0;
+
+    public function get(string $key): mixed
+    {
+        return $this->data[$key] ?? null;
+    }
+
+    public function set(string $key, mixed $value): void
+    {
+        $this->data[$key] = $value;
+    }
+
+    public function regenerate(): void
+    {
+        $this->regenerations++;
+    }
+
+    public function destroy(): void
+    {
+        $this->data = [];
+        $this->destructions++;
+    }
+}
