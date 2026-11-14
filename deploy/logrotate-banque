@@ -1,5 +1,5 @@
 # Rotation des journaux de Mes Comptes. Copier dans /etc/logrotate.d/banque
-/srv/banque/data/journal/connexions.log /var/log/php-fpm/banque-errors.log {
+/srv/banque/log/connexions.log /var/log/php-fpm/banque-errors.log {
 	monthly
 	rotate 12
 	compress

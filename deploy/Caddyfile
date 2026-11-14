@@ -2,7 +2,7 @@
 # Copier dans /etc/caddy/Caddyfile, puis : sudo systemctl reload caddy
 #
 # - HTTPS automatique (Let's Encrypt) et redirection HTTP → HTTPS : fournis par Caddy, rien à écrire.
-# - Seul front/dist est servi ; data/, api/src, api/bin, .git… ne sont jamais accessibles.
+# - Seul front/dist est servi ; base/ (la base SQLite), log/, api/src, api/bin, .git… ne sont jamais accessibles.
 # - /api/* est envoyé à PHP-FPM, toujours vers api/index.php.
 
 comptes.example.fr {

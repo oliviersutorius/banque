@@ -7,7 +7,8 @@ appliquées aux données. Pour l'architecture et les formats de fichiers, voir [
 
 Le site lit les exports CSV du Crédit Agricole, classe chaque opération dans une catégorie et présente les dépenses
 et les revenus par mois et par année. Il fonctionne sur le poste local ou en ligne sur un serveur ; dans les deux cas
-les données restent dans le dossier `data/` et l'accès est protégé par une connexion (voir « Connexion »).
+les données sont dans une base de données (`base/banque.sqlite`) et l'accès est protégé par une connexion (voir
+« Connexion »).
 
 | Page | Rôle |
 |---|---|
@@ -82,7 +83,7 @@ les compteurs à zéro. Pour lever un blocage tout de suite : `php api/bin/compt
 | Connexion bloquée après trop d'échecs | `php api/bin/compte.php debloquer` |
 
 Toutes les connexions, tous les échecs et toutes les déconnexions sont notés, avec la date et l'adresse IP, dans
-`data/journal/connexions.log`.
+`log/connexions.log`.
 
 ## Import d'un relevé
 
@@ -205,8 +206,8 @@ Elles reprennent le cahier des charges, avec ces ajustements décidés sur les v
 - `AMAZON` est « à confirmer ».
 - Pas de règle pour le salaire : elle se crée au premier import en corrigeant la ligne.
 
-Les catégories et règles initiales sont écrites dans `data/` au premier lancement seulement ; ensuite, seuls les
-fichiers de `data/` font foi.
+Les catégories et règles initiales sont enregistrées dans la base à sa création seulement ; ensuite, seule la base
+fait foi.
 
 ## Corriger une catégorie (apprentissage)
 
@@ -266,9 +267,30 @@ Choix de la charte graphique : **Guimauve** (pastel, par défaut), **Sauge & Lin
 
 ## Données et sauvegardes
 
-- Un fichier par mois dans `data/mois/` ; catégories, règles et paramètres dans `data/`.
-- Le compte (`data/compte.json`) contient l'empreinte du mot de passe, jamais le mot de passe lui-même ; la clé de la
-  double authentification y est chiffrée.
-- Avant chaque modification d'un fichier, une copie horodatée est faite dans `data/sauvegardes/` (les 20 dernières par
-  fichier). Pour revenir en arrière : arrêter le serveur et recopier la sauvegarde voulue à la place du fichier.
-- Pour essayer sans toucher à ses données : lancer une instance d'essai avec `BANQUE_DATA_DIR` (voir le README).
+- Toutes les données (opérations, catégories, règles, paramètres, compte) sont dans une seule base de données :
+  `base/banque.sqlite`. Seul le journal des connexions est un fichier, dans `log/`.
+- Les opérations restent rapides à afficher quand l'historique grandit : chaque page ne lit que ce qu'elle montre, et
+  renommer une catégorie ne réécrit aucune opération.
+- Le compte contient l'empreinte du mot de passe, jamais le mot de passe lui-même ; la clé de la double
+  authentification y est chiffrée.
+- **Sauvegardes** : une copie de la base est faite chaque jour avant la première modification, et avant toute
+  évolution de sa structure, dans `base/sauvegardes/` (les 20 dernières). Pour en faire une tout de suite :
+  `php api/bin/base.php sauvegarder`. Pour revenir en arrière : arrêter le serveur, recopier la sauvegarde voulue à la
+  place de `base/banque.sqlite` (et supprimer `banque.sqlite-wal` et `banque.sqlite-shm` s'ils existent).
+- Pour contrôler la base : `php api/bin/base.php verifier`.
+- Pour essayer sans toucher à ses données : lancer une instance d'essai avec `BANQUE_BASE` (voir le README).
+
+### Passage des fichiers à la base (novembre 2026)
+
+Avant novembre 2026, les données étaient dans des fichiers du dossier `data/`. Tant qu'ils n'ont pas été transférés,
+le site affiche « Migration nécessaire ». Le transfert se fait en trois commandes ; rien n'est supprimé sans
+vérification ni confirmation :
+
+1. `php api/bin/migrer-json.php` : simulation. Affiche ce qui sera transféré (nombre d'opérations et totaux par mois)
+   et les éventuelles anomalies, sans rien modifier.
+2. `php api/bin/migrer-json.php --appliquer` : crée la base et y copie tout, puis vérifie qu'elle contient exactement
+   les mêmes données que les fichiers (sinon elle est effacée et rien ne change). Les fichiers restent en place :
+   c'est le moment de contrôler le site. Il faut se reconnecter une fois.
+3. `php api/bin/migrer-json.php --nettoyer` : archive tout `data/` dans `base/archives/` (un fichier `.tar.gz`),
+   puis, après confirmation, supprime les fichiers transférés. Le journal des connexions passe dans `log/` et `data/`
+   disparaît. Si le site a déjà servi depuis l'étape 2, ajouter `--malgre-differences`.

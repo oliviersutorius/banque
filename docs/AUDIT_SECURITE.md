@@ -147,7 +147,13 @@ Les fichiers `data/mois/*.json` et `data/sauvegardes/` contiennent l'historique 
 ligne : chiffrement du disque/volume (LUKS ou chiffrement fourni par l'hébergeur), sauvegardes externes chiffrées
 (`restic`, `borg`), et idéalement `data/` hors de la racine web.
 
-**14/11/2026** — le secret TOTP est chiffré (clé hors de `data/`) ; le reste dépend du serveur (étape 7).
+**14/11/2026** — le secret TOTP est chiffré (clé hors des données) ; le reste dépend du serveur (étape 7).
+
+**14/11/2026, passage à SQLite** — les données sont dans `base/banque.sqlite` (0600, dossier 0700, hors de la racine
+web : Caddy ne sert que `front/dist`). Le chiffrement du disque et les sauvegardes externes chiffrées restent
+nécessaires : SQLite écrit en clair, comme les anciens fichiers. L'archive de l'ancien `data/`
+(`base/archives/*.tar.gz`) contient tout l'historique en clair : à garder hors ligne ou à supprimer une fois la
+migration validée.
 
 ### V8 — Pas de limitation de débit
 
@@ -165,7 +171,19 @@ Les dossiers sont créés en `0700` (`Storage::ensureDirectories`), mais les fic
 constaté). **Correctif** : `umask(0077)` au démarrage de l'API, ou `chmod 0600` après écriture dans `JsonFile`.
 
 **✅ Corrigé le 14/11/2026** — `umask(0077)` au démarrage de l'API et des scripts `api/bin/` : fichiers en 0600,
-dossiers en 0700. Pour un `data/` existant : `chmod -R go-rwx data`.
+dossiers en 0700. Pour un `data/` existant : `chmod -R go-rwx data`. Depuis le passage à SQLite : base, sauvegardes,
+archives et journaux sont créés en 0600.
+
+### Passage à SQLite (14/11/2026)
+
+- Requêtes **toujours préparées** (`Database::run`, paramètres liés, y compris les listes `IN (?, …)`) : pas
+  d'injection SQL possible depuis une saisie.
+- Contraintes en base en plus des contrôles du code : clés étrangères, `CHECK`, déclencheurs (une opération ou une
+  règle ne peut viser qu'une catégorie feuille du même sens).
+- Écritures en transaction (tout ou rien) ; la vérification d'un code TOTP et la confirmation d'import sont en
+  transaction immédiate (pas de double utilisation, pas de doublons par requêtes simultanées).
+- Sessions en base : la déconnexion, un changement de mot de passe ou de second facteur les suppriment.
+- Garde-fou : tant que l'ancien `data/` n'est pas migré, l'API répond 503 au lieu de démarrer sur une base vide.
 
 ## 2. Stack technique et montées de version
 
@@ -294,7 +312,7 @@ page de connexion sur tout 401.
   utilisateur), sans jamais journaliser de mot de passe ni de données bancaires.
 - Rotation des journaux (`logrotate`).
 
-**🟡 14/11/2026** — verrouillage progressif et journal des connexions (`data/journal/connexions.log`) faits ;
+**🟡 14/11/2026** — verrouillage progressif et journal des connexions (`log/connexions.log`) faits ;
 rotation : `deploy/logrotate-banque` ; limite globale par IP : module Caddy facultatif. Le journal des imports et
 suppressions n'est pas fait.
 
@@ -302,7 +320,9 @@ suppressions n'est pas fait.
 
 - Chiffrement du volume de données.
 - Sauvegardes quotidiennes externes et chiffrées (`restic`/`borg` vers un stockage distinct), **testées en
-  restauration**. Les sauvegardes locales de `data/sauvegardes/` ne protègent pas contre la perte du serveur.
+  restauration**. Les sauvegardes locales de `base/sauvegardes/` ne protègent pas contre la perte du serveur.
+  Avec SQLite, sauvegarder une **copie cohérente** (`php api/bin/base.php sauvegarder`, ou les fichiers de
+  `base/sauvegardes/`), jamais `banque.sqlite` seul pendant une écriture (fichiers `-wal`).
 - RGPD : si d'autres personnes utilisent l'application, leurs relevés bancaires sont des données personnelles
   (information, droit à l'effacement, hébergement dans l'UE de préférence).
 
@@ -311,7 +331,8 @@ suppressions n'est pas fait.
 - Relancer `npm audit`, les tests PHP et JS.
 - Scanner le site : Mozilla Observatory / securityheaders.com (en-têtes), SSL Labs (TLS, viser A+), OWASP ZAP en mode
   « baseline » (scan passif).
-- Contrôler que `https://<domaine>/data/`, `/api/src/`, `/.git/`, `/PROMPT.md` renvoient 404.
+- Contrôler que `https://<domaine>/base/banque.sqlite`, `/log/`, `/api/src/`, `/.git/`, `/PROMPT.md` ne renvoient
+  jamais ces fichiers (404 ou page du front).
 - Utiliser la checklist **OWASP ASVS niveau 1** comme référence.
 
 ### Étape 9 — Maintien dans le temps

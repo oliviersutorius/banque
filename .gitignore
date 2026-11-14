@@ -1,6 +1,8 @@
 /nbproject/private/
 
 # Données bancaires personnelles : jamais versionnées
+/base/
+/log/
 /data/
 /csv/
 /exemple.csv

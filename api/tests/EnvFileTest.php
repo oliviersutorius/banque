@@ -11,10 +11,10 @@ final class EnvFileTest extends TestCase
 {
     public function testLitLesVariablesEtIgnoreCommentairesEtLignesVides(): void
     {
-        $content = "# Poste local\n\nBANQUE_TOTP=desactive\r\nexport BANQUE_DATA_DIR = \"/tmp/banque essai\"\nBANQUE_CLE_FICHIER='/home/moi/cle'\nBANQUE_HOTES=\n";
+        $content = "# Poste local\n\nBANQUE_TOTP=desactive\r\nexport BANQUE_BASE = \"/tmp/banque essai\"\nBANQUE_CLE_FICHIER='/home/moi/cle'\nBANQUE_HOTES=\n";
         $this->assertSame([
             'BANQUE_TOTP' => 'desactive',
-            'BANQUE_DATA_DIR' => '/tmp/banque essai',
+            'BANQUE_BASE' => '/tmp/banque essai',
             'BANQUE_CLE_FICHIER' => '/home/moi/cle',
             'BANQUE_HOTES' => '',
         ], EnvFile::parse($content));
