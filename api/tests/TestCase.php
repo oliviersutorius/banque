@@ -32,6 +32,17 @@ abstract class TestCase
         }
     }
 
+    /**
+     * Base SQLite en mémoire avec le schéma complet (vide : sans données par défaut).
+     */
+    protected static function memoryDatabase(): \Banque\Database
+    {
+        $db = new \Banque\Database(\Banque\Database::MEMORY);
+        $db->migrate(dirname(__DIR__) . '/schema');
+
+        return $db;
+    }
+
     protected function markSkipped(string $reason): never
     {
         throw new TestSkipped($reason);
