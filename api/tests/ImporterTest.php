@@ -9,9 +9,9 @@ use Banque\Categorizer;
 use Banque\CsvParser;
 use Banque\DefaultData;
 use Banque\Importer;
-use Banque\JsonFile;
+use Banque\CategoryRepository;
 use Banque\LabelNormalizer;
-use Banque\MonthRepository;
+use Banque\OperationRepository;
 use Banque\Rule;
 use InvalidArgumentException;
 
@@ -20,16 +20,14 @@ final class ImporterTest extends TestCase
     private const HEADER = "Date;Libellé;Débit euros;Crédit euros\n";
     private const CAFE = '10/03/2026;"Paiement par carte PAIEMENT PAR CARTE X1234 CAFE DU PORT 09/03";2,5;';
 
-    private readonly TempDir $tmp;
-    private readonly MonthRepository $months;
+    private readonly OperationRepository $months;
     private readonly Importer $importer;
 
     public function __construct()
     {
-        $this->tmp = new TempDir();
-        mkdir($this->tmp->path . '/mois');
-        mkdir($this->tmp->path . '/sauvegardes');
-        $this->months = new MonthRepository($this->tmp->path . '/mois', new JsonFile($this->tmp->path . '/sauvegardes'));
+        $db = self::memoryDatabase();
+        DefaultData::seed($db);
+        $this->months = new OperationRepository($db, new CategoryRepository($db));
         $catalog = CategoryCatalog::fromArray(DefaultData::categories());
         $normalizer = new LabelNormalizer();
         $this->importer = new Importer(
@@ -95,7 +93,7 @@ final class ImporterTest extends TestCase
             'tri par date, ordre du CSV conservé à date égale',
         );
         $line = $this->months->lines('202601')[0];
-        $this->assertSame(['date', 'libelle', 'catégorie', 'dépense'], array_keys($line));
+        $this->assertSame(['id', 'date', 'libelle', 'catégorie', 'dépense'], array_keys($line));
         $this->assertSame('1,00', $line['dépense']);
     }
 

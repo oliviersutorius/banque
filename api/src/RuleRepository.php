@@ -7,30 +7,112 @@ namespace Banque;
 use InvalidArgumentException;
 
 /**
- * Lecture et écriture de data/regles.json.
+ * Tables « regles » et « regle_mots ». Une règle est désignée par son identifiant ; l'ordre des identifiants départage
+ * deux règles de même priorité.
  */
 final class RuleRepository
 {
     public function __construct(
-        private readonly string $path,
-        private readonly JsonFile $json,
+        private readonly Database $db,
+        private readonly CategoryRepository $categories,
     ) {
     }
 
     /**
-     * @return list<Rule>
+     * @return list<Rule> dans l'ordre des identifiants
      */
     public function all(): array
     {
-        return Rule::listFromArray($this->json->read($this->path));
+        $words = [];
+        foreach ($this->db->all('SELECT regle_id, mot FROM regle_mots ORDER BY regle_id, position') as $row) {
+            $words[(int) $row['regle_id']][] = (string) $row['mot'];
+        }
+        $rows = $this->db->all(<<<'SQL'
+            SELECT r.id, r.motif, r.sens, r.origine, r.type_operation, r.a_confirmer, c.nom AS categorie, p.nom AS parent
+            FROM regles r
+            JOIN categories c ON c.id = r.categorie_id
+            LEFT JOIN categories p ON p.id = c.parent_id
+            ORDER BY r.id
+            SQL);
+
+        return array_map(static function (array $row) use ($words): Rule {
+            $direction = Direction::from((string) $row['sens']);
+
+            return new Rule(
+                (string) $row['motif'],
+                $direction,
+                $direction === Direction::Expense ? (string) $row['parent'] : (string) $row['categorie'],
+                $direction === Direction::Expense ? (string) $row['categorie'] : null,
+                (string) $row['origine'],
+                $words[(int) $row['id']] ?? [],
+                $row['type_operation'] === null ? null : (string) $row['type_operation'],
+                $row['a_confirmer'] === 1,
+                (int) $row['id'],
+            );
+        }, $rows);
+    }
+
+    public function find(int $id): ?Rule
+    {
+        foreach ($this->all() as $rule) {
+            if ($rule->id === $id) {
+                return $rule;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return Rule la règle enregistrée, avec son identifiant
+     */
+    public function insert(Rule $rule): Rule
+    {
+        return $this->db->transaction(function () use ($rule): Rule {
+            $this->db->run(
+                'INSERT INTO regles (motif, sens, categorie_id, origine, type_operation, a_confirmer) VALUES (?, ?, ?, ?, ?, ?)',
+                [$rule->motif, $rule->direction->value, $this->leaf($rule), $rule->origin, $rule->operationType, $rule->toConfirm ? 1 : 0],
+            );
+            $saved = $rule->withId($this->db->lastId());
+            $this->saveWords($saved);
+
+            return $saved;
+        });
     }
 
     /**
      * @param list<Rule> $rules
      */
-    public function saveAll(array $rules): void
+    public function insertAll(array $rules): void
     {
-        $this->json->write($this->path, array_map(static fn (Rule $r): array => $r->toArray(), $rules));
+        $this->db->transaction(function () use ($rules): void {
+            foreach ($rules as $rule) {
+                $this->insert($rule);
+            }
+        });
+    }
+
+    /**
+     * @param list<int> $categoryIds
+     */
+    public function countInCategories(array $categoryIds): int
+    {
+        return $categoryIds === [] ? 0 : (int) $this->db->value(
+            'SELECT count(*) FROM regles WHERE categorie_id IN (' . implode(', ', array_fill(0, count($categoryIds), '?')) . ')',
+            $categoryIds,
+        );
+    }
+
+    /**
+     * @param list<int> $categoryIds
+     * @return int nombre de règles déplacées
+     */
+    public function moveCategories(array $categoryIds, int $target): int
+    {
+        return $categoryIds === [] ? 0 : $this->db->run(
+            'UPDATE regles SET categorie_id = ? WHERE categorie_id IN (' . implode(', ', array_fill(0, count($categoryIds), '?')) . ')',
+            [$target, ...$categoryIds],
+        )->rowCount();
     }
 
     /**
@@ -80,64 +162,77 @@ final class RuleRepository
     }
 
     /**
-     * Remplace la règle d'un index, en gardant son origine.
+     * Remplace une règle, en gardant son identifiant et son origine.
      *
      * @param array<mixed> $input
-     * @throws LineConflictException si la règle de cet index n'a plus le motif attendu
+     * @throws HttpException 404 si la règle n'existe plus
      */
-    public function update(int $index, string $expectedMotif, array $input, CategoryCatalog $catalog): Rule
+    public function update(int $id, array $input, CategoryCatalog $catalog): Rule
     {
-        $rules = $this->all();
-        $current = $this->at($rules, $index, $expectedMotif);
-        $rules[$index] = self::fromInput($input, $catalog, $current->origin);
-        $this->saveAll($rules);
-
-        return $rules[$index];
-    }
-
-    /**
-     * @throws LineConflictException si la règle de cet index n'a plus le motif attendu
-     */
-    public function delete(int $index, string $expectedMotif): void
-    {
-        $rules = $this->all();
-        $this->at($rules, $index, $expectedMotif);
-        array_splice($rules, $index, 1);
-        $this->saveAll($rules);
-    }
-
-    /**
-     * @param list<Rule> $rules
-     */
-    private function at(array $rules, int $index, string $expectedMotif): Rule
-    {
-        $rule = $rules[$index] ?? throw new InvalidArgumentException('Règle introuvable : ' . $index);
-        if ($rule->motif !== $expectedMotif) {
-            throw new LineConflictException('Les règles ont changé : recharge la page');
-        }
+        $current = $this->find($id) ?? throw new HttpException(404, 'Règle introuvable : rechargez la page');
+        $rule = self::fromInput($input, $catalog, $current->origin)->withId($id);
+        $this->replace($rule);
 
         return $rule;
     }
 
     /**
-     * Ajoute une règle apprise. Une règle apprise ayant les mêmes conditions est remplacée.
-     *
-     * @return bool true si une règle existante a été remplacée
+     * @throws HttpException 404 si la règle n'existe plus
      */
-    public function learn(Rule $rule): bool
+    public function delete(int $id): void
     {
-        $rules = $this->all();
-        foreach ($rules as $i => $existing) {
-            if ($existing->origin === Rule::ORIGIN_LEARNED && self::sameConditions($existing, $rule)) {
-                $rules[$i] = $rule;
-                $this->saveAll($rules);
-                return true;
-            }
+        if ($this->db->run('DELETE FROM regles WHERE id = ?', [$id])->rowCount() === 0) {
+            throw new HttpException(404, 'Règle introuvable : rechargez la page');
         }
-        $rules[] = $rule;
-        $this->saveAll($rules);
+    }
 
-        return false;
+    /**
+     * Ajoute une règle apprise. Une règle apprise ayant les mêmes conditions est remplacée (elle garde son
+     * identifiant, donc sa place).
+     *
+     * @return array{règle: Rule, remplacée: bool}
+     */
+    public function learn(Rule $rule): array
+    {
+        return $this->db->transaction(function () use ($rule): array {
+            foreach ($this->all() as $existing) {
+                if ($existing->origin === Rule::ORIGIN_LEARNED && self::sameConditions($existing, $rule)) {
+                    $saved = $rule->withId((int) $existing->id);
+                    $this->replace($saved);
+
+                    return ['règle' => $saved, 'remplacée' => true];
+                }
+            }
+
+            return ['règle' => $this->insert($rule), 'remplacée' => false];
+        });
+    }
+
+    private function replace(Rule $rule): void
+    {
+        $this->db->transaction(function () use ($rule): void {
+            $this->db->run(
+                'UPDATE regles SET motif = ?, sens = ?, categorie_id = ?, origine = ?, type_operation = ?, a_confirmer = ? WHERE id = ?',
+                [$rule->motif, $rule->direction->value, $this->leaf($rule), $rule->origin, $rule->operationType, $rule->toConfirm ? 1 : 0, $rule->id],
+            );
+            $this->db->run('DELETE FROM regle_mots WHERE regle_id = ?', [$rule->id]);
+            $this->saveWords($rule);
+        });
+    }
+
+    private function saveWords(Rule $rule): void
+    {
+        foreach ($rule->and as $position => $word) {
+            $this->db->run('INSERT INTO regle_mots (regle_id, position, mot) VALUES (?, ?, ?)', [$rule->id, $position, $word]);
+        }
+    }
+
+    private function leaf(Rule $rule): int
+    {
+        return $this->categories->leafId(
+            $rule->direction,
+            $rule->category2 === null ? $rule->category1 : ['catégorie1' => $rule->category1, 'catégorie2' => $rule->category2],
+        );
     }
 
     private static function sameConditions(Rule $a, Rule $b): bool

@@ -7,25 +7,25 @@ namespace Banque\Tests;
 use Banque\CategoryCatalog;
 use Banque\DefaultData;
 use Banque\Direction;
-use Banque\JsonFile;
+use Banque\CategoryRepository;
+use Banque\Database;
 use Banque\LabelNormalizer;
 use Banque\MonthLine;
-use Banque\MonthRepository;
+use Banque\OperationRepository;
 use Banque\Rule;
 use Banque\RuleRepository;
 use InvalidArgumentException;
 
 final class LearningTest extends TestCase
 {
-    private readonly TempDir $tmp;
-    private readonly JsonFile $json;
+    private readonly Database $db;
+    private readonly CategoryRepository $categories;
 
     public function __construct()
     {
-        $this->tmp = new TempDir();
-        mkdir($this->tmp->path . '/mois');
-        mkdir($this->tmp->path . '/sauvegardes');
-        $this->json = new JsonFile($this->tmp->path . '/sauvegardes');
+        $this->db = self::memoryDatabase();
+        DefaultData::seed($this->db);
+        $this->categories = new CategoryRepository($this->db);
     }
 
     public function testRegleAppriseDepuisUneSaisie(): void
@@ -53,12 +53,14 @@ final class LearningTest extends TestCase
 
     public function testUneRegleAppriseIdentiqueEstRemplacee(): void
     {
-        $repository = new RuleRepository($this->tmp->path . '/regles.json', $this->json);
-        $repository->saveAll(Rule::listFromArray(DefaultData::rules()));
+        $repository = new RuleRepository($this->db, $this->categories);
         $count = count($repository->all());
 
-        $this->assertSame(false, $repository->learn(self::salary('ACELYS', 'Salaire')));
-        $this->assertSame(true, $repository->learn(self::salary('acelys', 'Autres revenus')));
+        $first = $repository->learn(self::salary('ACELYS', 'Salaire'));
+        $this->assertSame(false, $first['remplacée']);
+        $second = $repository->learn(self::salary('acelys', 'Autres revenus'));
+        $this->assertSame(true, $second['remplacée']);
+        $this->assertSame($first['règle']->id, $second['règle']->id, 'même identifiant');
 
         $rules = $repository->all();
         $this->assertSame($count + 1, count($rules));
@@ -67,14 +69,12 @@ final class LearningTest extends TestCase
 
     public function testAppliqueUneRegleAuxMoisDejaEnregistresSeulementSiACategoriser(): void
     {
-        $months = new MonthRepository($this->tmp->path . '/mois', $this->json);
+        $months = new OperationRepository($this->db, $this->categories);
         $uncategorized = 'À catégoriser';
-        $months->save('202601', [
+        $months->insertLines([
             MonthLine::build('30/01/2026', 'Virement en votre faveur VIREMENT EN VOTRE FAVEUR ACELYS SERVICES', $uncategorized, Direction::Income, '2645,05'),
             MonthLine::build('15/01/2026', 'Virement en votre faveur VIREMENT EN VOTRE FAVEUR ACELYS PRIME', 'Autres revenus', Direction::Income, '100,00'),
             MonthLine::build('16/01/2026', 'Paiement par carte ACELYS CAFE', ['catégorie1' => $uncategorized, 'catégorie2' => 'Non classé'], Direction::Expense, '3,00'),
-        ]);
-        $months->save('202602', [
             MonthLine::build('27/02/2026', 'Virement en votre faveur VIREMENT EN VOTRE FAVEUR ACELYS SERVICES', $uncategorized, Direction::Income, '2645,05'),
         ]);
 
@@ -90,7 +90,7 @@ final class LearningTest extends TestCase
 
     public function testMoisInvalideRefuse(): void
     {
-        $months = new MonthRepository($this->tmp->path . '/mois', $this->json);
+        $months = new OperationRepository($this->db, $this->categories);
 
         foreach (['202613', '2026', '../x', '202600'] as $month) {
             $this->assertThrows(InvalidArgumentException::class, static fn () => $months->lines($month));

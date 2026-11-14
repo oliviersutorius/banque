@@ -7,7 +7,11 @@ namespace Banque;
 use InvalidArgumentException;
 
 /**
- * Modifications de categories.json, répercutées dans tous les fichiers mensuels et dans les règles.
+ * Modifications des catégories (ajout, icône, renommage, suppression avec remplacement).
+ *
+ * Les opérations et les règles pointent vers la catégorie par son identifiant : un renommage ne touche qu'une ligne
+ * de la table « categories ». Une suppression déplace d'abord les opérations et règles concernées vers la catégorie
+ * de remplacement.
  *
  * Une catégorie est désignée par son sens et son chemin : [catégorie1] ou [catégorie1, catégorie2].
  * « À catégoriser » (et sa sous-catégorie « Non classé ») ne peut être ni renommée ni supprimée.
@@ -17,9 +21,9 @@ final class CategoryManager
     private const MAX_NAME_LENGTH = 60;
 
     public function __construct(
-        private readonly string $path,
-        private readonly JsonFile $json,
-        private readonly MonthRepository $months,
+        private readonly Database $db,
+        private readonly CategoryRepository $categories,
+        private readonly OperationRepository $operations,
         private readonly RuleRepository $rules,
     ) {
     }
@@ -29,8 +33,7 @@ final class CategoryManager
      */
     public function all(): array
     {
-        /** @var array{dépenses: list<array<string, mixed>>, revenus: list<array<string, mixed>>} */
-        return $this->json->read($this->path);
+        return $this->categories->tree();
     }
 
     /**
@@ -41,17 +44,9 @@ final class CategoryManager
      */
     public function usage(Direction $direction, array $path): array
     {
-        $lines = 0;
-        foreach ($this->months->months() as $month) {
-            foreach ($this->months->lines($month) as $line) {
-                if (MonthLine::direction($line) === $direction && self::lineMatches($line, $path)) {
-                    $lines++;
-                }
-            }
-        }
-        $rules = count(array_filter($this->rules->all(), static fn (Rule $r): bool => self::ruleMatches($r, $direction, $path)));
+        $leaves = $this->categories->leafIds($direction, $path);
 
-        return ['lignes' => $lines, 'règles' => $rules];
+        return ['lignes' => $this->operations->countInCategories($leaves), 'règles' => $this->rules->countInCategories($leaves)];
     }
 
     /**
@@ -61,29 +56,31 @@ final class CategoryManager
      */
     public function add(Direction $direction, array $path, string $icon, ?string $firstSub = null): void
     {
-        $data = $this->all();
         $name = self::validName(end($path) ?: '');
 
-        if ($direction === Direction::Income) {
-            self::assertDepth($path, 1);
-            if ($this->find($data, $direction, $name) !== null) {
-                throw new InvalidArgumentException('La catégorie « ' . $name . ' » existe déjà');
+        $this->db->transaction(function () use ($direction, $path, $icon, $firstSub, $name): void {
+            if ($direction === Direction::Income) {
+                self::assertDepth($path, 1);
+                if ($this->categories->id($direction, [$name]) !== null) {
+                    throw new InvalidArgumentException('La catégorie « ' . $name . ' » existe déjà');
+                }
+                $this->categories->insert($direction, null, $name, self::validIcon($icon));
+            } elseif (count($path) === 1) {
+                if ($this->categories->id($direction, [$name]) !== null) {
+                    throw new InvalidArgumentException('La catégorie « ' . $name . ' » existe déjà');
+                }
+                $sub = self::validName((string) $firstSub);
+                $parent = $this->categories->insert($direction, null, $name, self::validIcon($icon));
+                $this->categories->insert($direction, $parent, $sub, null);
+            } else {
+                self::assertDepth($path, 2);
+                $parent = $this->categories->id($direction, [$path[0]]) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
+                if (in_array($name, $this->categories->subNames($parent), true)) {
+                    throw new InvalidArgumentException('La sous-catégorie « ' . $name . ' » existe déjà');
+                }
+                $this->categories->insert($direction, $parent, $name, null);
             }
-            $data['revenus'][] = ['nom' => $name, 'icone' => self::validIcon($icon)];
-        } elseif (count($path) === 1) {
-            if ($this->find($data, $direction, $name) !== null) {
-                throw new InvalidArgumentException('La catégorie « ' . $name . ' » existe déjà');
-            }
-            $data['dépenses'][] = ['nom' => $name, 'icone' => self::validIcon($icon), 'sous_catégories' => [self::validName((string) $firstSub)]];
-        } else {
-            self::assertDepth($path, 2);
-            $i = $this->find($data, $direction, $path[0]) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
-            if (in_array($name, $data['dépenses'][$i]['sous_catégories'], true)) {
-                throw new InvalidArgumentException('La sous-catégorie « ' . $name . ' » existe déjà');
-            }
-            $data['dépenses'][$i]['sous_catégories'][] = $name;
-        }
-        $this->json->write($this->path, $data);
+        });
     }
 
     /**
@@ -92,52 +89,45 @@ final class CategoryManager
     public function changeIcon(Direction $direction, array $path, string $icon): void
     {
         self::assertDepth($path, 1);
-        $data = $this->all();
-        $key = self::key($direction);
-        $i = $this->find($data, $direction, $path[0]) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
-        $data[$key][$i]['icone'] = self::validIcon($icon);
-        $this->json->write($this->path, $data);
+        $id = $this->categories->id($direction, $path) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
+        $this->categories->changeIcon($id, self::validIcon($icon));
     }
 
     /**
-     * Renomme une catégorie partout : categories.json, fichiers mensuels et règles.
+     * Renomme une catégorie : les opérations et les règles suivent d'elles-mêmes.
      *
      * @param list<string> $path
-     * @return array{lignes: int, règles: int} éléments mis à jour
+     * @return array{lignes: int, règles: int} éléments concernés par le renommage
      */
     public function rename(Direction $direction, array $path, string $newName): array
     {
-        $data = $this->all();
         $newName = self::validName($newName);
         $this->assertModifiable($path);
-        $key = self::key($direction);
-        $i = $this->find($data, $direction, $path[0]) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
-
-        if (count($path) === 1) {
-            if ($newName !== $path[0] && $this->find($data, $direction, $newName) !== null) {
-                throw new InvalidArgumentException('La catégorie « ' . $newName . ' » existe déjà');
-            }
-            $data[$key][$i]['nom'] = $newName;
-            $target = [$newName];
-        } else {
+        if (count($path) === 2) {
             self::assertDepth($path, 2);
-            $subs = $data[$key][$i]['sous_catégories'];
-            $j = array_search($path[1], $subs, true);
-            if ($j === false) {
-                throw new InvalidArgumentException('Sous-catégorie inconnue : ' . $path[1]);
-            }
-            if ($newName !== $path[1] && in_array($newName, $subs, true)) {
-                throw new InvalidArgumentException('La sous-catégorie « ' . $newName . ' » existe déjà');
-            }
-            $data[$key][$i]['sous_catégories'][$j] = $newName;
-            $target = [$path[0], $newName];
+        } else {
+            self::assertDepth($path, 1);
         }
 
-        // Une catégorie 1 renommée garde ses sous-catégories : seul le premier niveau change
-        $result = $this->replaceEverywhere($direction, $path, $target, keepSub: count($path) === 1);
-        $this->json->write($this->path, $data);
+        return $this->db->transaction(function () use ($direction, $path, $newName): array {
+            $parent = $this->categories->id($direction, [$path[0]]) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
+            if (count($path) === 1) {
+                if ($newName !== $path[0] && $this->categories->id($direction, [$newName]) !== null) {
+                    throw new InvalidArgumentException('La catégorie « ' . $newName . ' » existe déjà');
+                }
+                $this->categories->rename($parent, $newName);
+                $target = [$newName];
+            } else {
+                $id = $this->categories->id($direction, $path) ?? throw new InvalidArgumentException('Sous-catégorie inconnue : ' . $path[1]);
+                if ($newName !== $path[1] && in_array($newName, $this->categories->subNames($parent), true)) {
+                    throw new InvalidArgumentException('La sous-catégorie « ' . $newName . ' » existe déjà');
+                }
+                $this->categories->rename($id, $newName);
+                $target = [$path[0], $newName];
+            }
 
-        return $result;
+            return $this->usage($direction, $target);
+        });
     }
 
     /**
@@ -149,145 +139,40 @@ final class CategoryManager
      */
     public function delete(Direction $direction, array $path, ?array $replacement): array
     {
-        $data = $this->all();
         $this->assertModifiable($path);
-        $key = self::key($direction);
-        $i = $this->find($data, $direction, $path[0]) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
 
-        if (count($path) === 2) {
-            $subs = $data[$key][$i]['sous_catégories'];
-            if (!in_array($path[1], $subs, true)) {
-                throw new InvalidArgumentException('Sous-catégorie inconnue : ' . $path[1]);
-            }
-            if (count($subs) === 1) {
-                throw new InvalidArgumentException('C\'est la dernière sous-catégorie : supprime plutôt « ' . $path[0] . ' »');
-            }
-        }
-
-        $usage = $this->usage($direction, $path);
-        if ($usage['lignes'] + $usage['règles'] > 0) {
-            if ($replacement === null) {
-                throw new InvalidArgumentException('Catégorie utilisée : choisis une catégorie de remplacement');
-            }
-            $catalog = CategoryCatalog::fromArray($data);
-            $exists = $direction === Direction::Expense
-                ? count($replacement) === 2 && $catalog->hasExpense($replacement[0], $replacement[1])
-                : count($replacement) === 1 && $catalog->hasIncome($replacement[0]);
-            $inside = $replacement[0] === $path[0] && (count($path) === 1 || ($replacement[1] ?? null) === $path[1]);
-            if (!$exists || $inside) {
-                throw new InvalidArgumentException('Catégorie de remplacement invalide');
-            }
-            $result = $this->replaceEverywhere($direction, $path, $replacement, keepSub: false);
-        } else {
-            $result = $usage;
-        }
-
-        if (count($path) === 1) {
-            array_splice($data[$key], $i, 1);
-        } else {
-            $data[$key][$i]['sous_catégories'] = array_values(array_filter(
-                $data[$key][$i]['sous_catégories'],
-                static fn (string $s): bool => $s !== $path[1],
-            ));
-        }
-        $this->json->write($this->path, $data);
-
-        return $result;
-    }
-
-    /**
-     * @param list<string> $from
-     * @param list<string> $to
-     * @return array{lignes: int, règles: int}
-     */
-    private function replaceEverywhere(Direction $direction, array $from, array $to, bool $keepSub): array
-    {
-        $build = static function (?string $currentSub) use ($direction, $to, $keepSub): string|array {
-            if ($direction === Direction::Income) {
-                return $to[0];
-            }
-            return ['catégorie1' => $to[0], 'catégorie2' => $keepSub ? (string) $currentSub : $to[1]];
-        };
-
-        $lines = 0;
-        foreach ($this->months->months() as $month) {
-            $monthLines = $this->months->lines($month);
-            $changed = false;
-            foreach ($monthLines as $k => $line) {
-                if (MonthLine::direction($line) === $direction && self::lineMatches($line, $from)) {
-                    $category = $line['catégorie'];
-                    $monthLines[$k]['catégorie'] = $build(is_array($category) ? $category['catégorie2'] : null);
-                    $changed = true;
-                    $lines++;
+        return $this->db->transaction(function () use ($direction, $path, $replacement): array {
+            $parent = $this->categories->id($direction, [$path[0]]) ?? throw new InvalidArgumentException('Catégorie inconnue : ' . $path[0]);
+            $id = $parent;
+            if (count($path) === 2) {
+                $id = $this->categories->id($direction, $path) ?? throw new InvalidArgumentException('Sous-catégorie inconnue : ' . $path[1]);
+                if (count($this->categories->subNames($parent)) === 1) {
+                    throw new InvalidArgumentException('C\'est la dernière sous-catégorie : supprime plutôt « ' . $path[0] . ' »');
                 }
             }
-            if ($changed) {
-                $this->months->save($month, $monthLines);
+
+            $leaves = $this->categories->leafIds($direction, $path);
+            $usage = $this->usage($direction, $path);
+            $result = $usage;
+            if ($usage['lignes'] + $usage['règles'] > 0) {
+                if ($replacement === null) {
+                    throw new InvalidArgumentException('Catégorie utilisée : choisis une catégorie de remplacement');
+                }
+                $expected = $direction === Direction::Expense ? 2 : 1;
+                $target = count($replacement) === $expected ? $this->categories->id($direction, $replacement) : null;
+                $inside = $replacement[0] === $path[0] && (count($path) === 1 || ($replacement[1] ?? null) === $path[1]);
+                if ($target === null || $inside) {
+                    throw new InvalidArgumentException('Catégorie de remplacement invalide');
+                }
+                $result = [
+                    'lignes' => $this->operations->moveCategories($leaves, $target),
+                    'règles' => $this->rules->moveCategories($leaves, $target),
+                ];
             }
-        }
+            $this->categories->delete($id);
 
-        $rules = $this->rules->all();
-        $count = 0;
-        foreach ($rules as $k => $rule) {
-            if (self::ruleMatches($rule, $direction, $from)) {
-                $category = $build($rule->category2);
-                $rules[$k] = new Rule(
-                    $rule->motif,
-                    $rule->direction,
-                    is_array($category) ? $category['catégorie1'] : $category,
-                    is_array($category) ? $category['catégorie2'] : null,
-                    $rule->origin,
-                    $rule->and,
-                    $rule->operationType,
-                    $rule->toConfirm,
-                );
-                $count++;
-            }
-        }
-        if ($count > 0) {
-            $this->rules->saveAll($rules);
-        }
-
-        return ['lignes' => $lines, 'règles' => $count];
-    }
-
-    /**
-     * @param array<mixed> $line
-     * @param list<string> $path
-     */
-    private static function lineMatches(array $line, array $path): bool
-    {
-        $category = $line['catégorie'] ?? null;
-        if (!is_array($category)) {
-            return $category === $path[0];
-        }
-
-        return ($category['catégorie1'] ?? null) === $path[0]
-            && (count($path) === 1 || ($category['catégorie2'] ?? null) === $path[1]);
-    }
-
-    /**
-     * @param list<string> $path
-     */
-    private static function ruleMatches(Rule $rule, Direction $direction, array $path): bool
-    {
-        return $rule->direction === $direction
-            && $rule->category1 === $path[0]
-            && (count($path) === 1 || $rule->category2 === $path[1]);
-    }
-
-    /**
-     * @param array<string, mixed> $data
-     */
-    private function find(array $data, Direction $direction, string $name): ?int
-    {
-        foreach ($data[self::key($direction)] as $i => $category) {
-            if ($category['nom'] === $name) {
-                return $i;
-            }
-        }
-
-        return null;
+            return $result;
+        });
     }
 
     /**
@@ -308,11 +193,6 @@ final class CategoryManager
         if (count($path) !== $depth) {
             throw new InvalidArgumentException('Chemin de catégorie invalide');
         }
-    }
-
-    private static function key(Direction $direction): string
-    {
-        return $direction === Direction::Expense ? 'dépenses' : 'revenus';
     }
 
     private static function validName(string $name): string

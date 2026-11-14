@@ -7,7 +7,7 @@ namespace Banque;
 use InvalidArgumentException;
 
 /**
- * Une règle de catégorisation (un élément de regles.json).
+ * Une règle de catégorisation (une ligne de la table « regles » et ses mots ET).
  *
  * Elle s'applique quand le libellé normalisé contient le motif, et chacun des mots de « et »,
  * sous forme de mots entiers, pour le bon sens d'opération et, si précisé, le bon type d'opération.
@@ -32,6 +32,8 @@ final class Rule
         public readonly ?string $operationType = null,
         /** La ligne catégorisée par cette règle doit être confirmée à l'import */
         public readonly bool $toConfirm = false,
+        /** Identifiant en base, null pour une règle pas encore enregistrée */
+        public readonly ?int $id = null,
     ) {
         if (Text::canonical($motif) === '') {
             throw new InvalidArgumentException('Le motif d\'une règle ne peut pas être vide');
@@ -103,12 +105,18 @@ final class Rule
         return $rules;
     }
 
+    public function withId(int $id): self
+    {
+        return new self($this->motif, $this->direction, $this->category1, $this->category2, $this->origin, $this->and, $this->operationType, $this->toConfirm, $id);
+    }
+
     /**
-     * @return array<string, mixed> la forme enregistrée dans regles.json
+     * @return array<string, mixed> forme de l'API (et de l'ancien regles.json), avec « id » si la règle est enregistrée
      */
     public function toArray(): array
     {
-        $data = ['motif' => $this->motif, 'type' => $this->direction->value];
+        $data = $this->id === null ? [] : ['id' => $this->id];
+        $data += ['motif' => $this->motif, 'type' => $this->direction->value];
         if ($this->direction === Direction::Expense) {
             $data['catégorie1'] = $this->category1;
             $data['catégorie2'] = $this->category2;

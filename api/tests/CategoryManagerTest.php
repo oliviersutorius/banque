@@ -6,43 +6,38 @@ namespace Banque\Tests;
 
 use Banque\CategoryCatalog;
 use Banque\CategoryManager;
+use Banque\CategoryRepository;
+use Banque\Database;
 use Banque\DefaultData;
 use Banque\Direction;
-use Banque\JsonFile;
-use Banque\LineConflictException;
+use Banque\HttpException;
 use Banque\MonthLine;
-use Banque\MonthRepository;
+use Banque\OperationRepository;
 use Banque\Rule;
 use Banque\RuleRepository;
 use InvalidArgumentException;
 
 final class CategoryManagerTest extends TestCase
 {
-    private readonly TempDir $tmp;
-    private readonly MonthRepository $months;
+    private readonly Database $db;
+    private readonly OperationRepository $months;
     private readonly RuleRepository $rules;
     private readonly CategoryManager $manager;
-    private readonly JsonFile $json;
 
     public function __construct()
     {
-        $this->tmp = new TempDir();
-        mkdir($this->tmp->path . '/mois');
-        mkdir($this->tmp->path . '/sauvegardes');
-        $this->json = new JsonFile($this->tmp->path . '/sauvegardes');
-        $this->json->write($this->tmp->path . '/categories.json', DefaultData::categories());
-        $this->months = new MonthRepository($this->tmp->path . '/mois', $this->json);
-        $this->rules = new RuleRepository($this->tmp->path . '/regles.json', $this->json);
-        $this->rules->saveAll(Rule::listFromArray(DefaultData::rules()));
-        $this->manager = new CategoryManager($this->tmp->path . '/categories.json', $this->json, $this->months, $this->rules);
+        $this->db = self::memoryDatabase();
+        DefaultData::seed($this->db);
+        $categories = new CategoryRepository($this->db);
+        $this->months = new OperationRepository($this->db, $categories);
+        $this->rules = new RuleRepository($this->db, $categories);
+        $this->manager = new CategoryManager($this->db, $categories, $this->months, $this->rules);
 
         $courses = ['catégorie1' => 'Alimentation', 'catégorie2' => 'Courses'];
-        $this->months->save('202601', [
+        $this->months->insertLines([
             MonthLine::build('12/01/2026', 'AUCHAN', $courses, Direction::Expense, '2,67'),
             MonthLine::build('13/01/2026', 'RESTO', ['catégorie1' => 'Alimentation', 'catégorie2' => 'Restaurant'], Direction::Expense, '20,00'),
             MonthLine::build('30/01/2026', 'MUTUELLE', 'Remboursements santé', Direction::Income, '50,00'),
-        ]);
-        $this->months->save('202602', [
             MonthLine::build('12/02/2026', 'AUCHAN', $courses, Direction::Expense, '5,00'),
         ]);
     }
@@ -137,20 +132,33 @@ final class CategoryManagerTest extends TestCase
         $this->assertThrows(InvalidArgumentException::class, fn () => $this->manager->add(Direction::Income, ['Bonus'], ''));
     }
 
-    public function testModifierEtSupprimerUneRegleParIndex(): void
+    public function testModifierEtSupprimerUneRegleParIdentifiant(): void
     {
         $catalog = $this->catalog();
-        $rule = $this->rules->update(0, 'AUCHAN', ['motif' => 'AUCHAN', 'type' => 'dépense', 'catégorie1' => 'Shopping', 'catégorie2' => 'Beauté', 'a_confirmer' => true], $catalog);
+        $first = $this->rules->all()[0];
+        $this->assertSame('AUCHAN', $first->motif);
+        $rule = $this->rules->update((int) $first->id, ['motif' => 'AUCHAN', 'type' => 'dépense', 'catégorie1' => 'Shopping', 'catégorie2' => 'Beauté', 'a_confirmer' => true, 'et' => ['DRIVE']], $catalog);
 
         $this->assertSame(Rule::ORIGIN_INITIAL, $rule->origin, 'l\'origine est conservée');
         $this->assertSame(true, $rule->toConfirm);
-        $this->assertThrows(LineConflictException::class, fn () => $this->rules->update(0, 'CARREFOUR', ['motif' => 'X', 'type' => 'revenu', 'catégorie' => 'Salaire'], $catalog));
+        $this->assertSame($first->id, $rule->id, 'même identifiant');
+        $this->assertSame(['DRIVE'], $this->rules->find((int) $first->id)?->and);
+        $this->assertSame('AUCHAN', $this->rules->all()[0]->motif, 'même place');
+        $this->assertThrows(HttpException::class, fn () => $this->rules->update(9999, ['motif' => 'X', 'type' => 'revenu', 'catégorie' => 'Salaire'], $catalog));
 
         $count = count($this->rules->all());
-        $this->assertThrows(LineConflictException::class, fn () => $this->rules->delete(0, 'LIDL'));
-        $this->rules->delete(0, 'AUCHAN');
+        $this->assertThrows(HttpException::class, fn () => $this->rules->delete(9999));
+        $this->rules->delete((int) $first->id);
         $this->assertSame($count - 1, count($this->rules->all()));
         $this->assertSame('CARREFOUR', $this->rules->all()[0]->motif);
+        $this->assertSame(0, $this->db->value('SELECT count(*) FROM regle_mots WHERE regle_id = ?', [$first->id]), 'mots supprimés');
+    }
+
+    public function testRenommerNeModifieQueLaCategorie(): void
+    {
+        $before = $this->db->all('SELECT id, categorie_id FROM operations ORDER BY id');
+        $this->manager->rename(Direction::Expense, ['Alimentation'], 'Nourriture');
+        $this->assertSame($before, $this->db->all('SELECT id, categorie_id FROM operations ORDER BY id'), 'opérations inchangées');
     }
 
     private function catalog(): CategoryCatalog

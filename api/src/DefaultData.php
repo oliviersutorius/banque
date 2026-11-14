@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Banque;
 
 /**
- * Catégories et règles initiales, écrites dans data/ au premier lancement.
- * Les tableaux ont exactement la forme des fichiers JSON.
+ * Catégories, règles et paramètres initiaux, enregistrés dans une base neuve (seed).
+ * Les tableaux ont la forme de l'API (et des anciens fichiers JSON).
  */
 final class DefaultData
 {
@@ -100,5 +100,26 @@ final class DefaultData
     public static function settings(): array
     {
         return ['thème' => 'guimauve'];
+    }
+
+    /**
+     * Remplit une base neuve (sans aucune catégorie). Sans effet sur une base déjà remplie.
+     *
+     * @return bool vrai si les données ont été installées
+     */
+    public static function seed(Database $db): bool
+    {
+        $categories = new CategoryRepository($db);
+
+        return $db->transaction(static function () use ($db, $categories): bool {
+            if (!$categories->isEmpty()) {
+                return false;
+            }
+            $categories->insertTree(self::categories());
+            (new RuleRepository($db, $categories))->insertAll(Rule::listFromArray(self::rules()));
+            (new SettingsRepository($db))->setAll(self::settings());
+
+            return true;
+        });
     }
 }

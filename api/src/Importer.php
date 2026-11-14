@@ -10,7 +10,7 @@ use InvalidArgumentException;
  * Import d'un CSV en deux temps.
  *
  * - preview : lecture et catégorisation, repérage des doublons ; rien n'est écrit
- * - confirm : écriture des lignes nouvelles dans les fichiers mensuels
+ * - confirm : enregistrement des lignes nouvelles, en une transaction
  *
  * Les doublons (même date, libellé, sens et montant) se comptent par occurrences : si le CSV contient
  * deux fois la même ligne et le mois une seule, une seule est ajoutée. Les lignes déjà enregistrées
@@ -24,7 +24,7 @@ final class Importer
         private readonly CsvParser $parser,
         private readonly Categorizer $categorizer,
         private readonly LabelNormalizer $normalizer,
-        private readonly MonthRepository $months,
+        private readonly OperationRepository $months,
         private readonly CategoryCatalog $catalog,
     ) {
     }
@@ -109,29 +109,33 @@ final class Importer
         }
         ksort($byMonth);
 
-        $report = [];
-        $added = 0;
-        foreach ($byMonth as $month => $lines) {
-            $month = (string) $month;
-            $existing = $this->months->lines($month);
-            $remaining = $this->occurrences($existing);
-            $new = [];
-            foreach ($lines as $line) {
-                $key = MonthLine::key($line);
-                if (($remaining[$key] ?? 0) > 0) {
-                    $remaining[$key]--;
-                } else {
-                    $new[] = $line;
+        // Lecture des doublons et écriture dans la même transaction : deux confirmations simultanées ne peuvent pas
+        // ajouter deux fois les mêmes lignes
+        return $this->months->transaction(function () use ($byMonth): array {
+            $report = [];
+            $added = 0;
+            foreach ($byMonth as $month => $lines) {
+                $month = (string) $month;
+                $remaining = $this->occurrences($this->months->lines($month));
+                $new = [];
+                foreach ($lines as $line) {
+                    $key = MonthLine::key($line);
+                    if (($remaining[$key] ?? 0) > 0) {
+                        $remaining[$key]--;
+                    } else {
+                        $new[] = $line;
+                    }
                 }
+                // Tri par date (stable) : à date égale, l'ordre du CSV est conservé, comme avant
+                usort($new, static fn (array $a, array $b): int
+                    => MonthLine::sortableDate((string) $a['date']) <=> MonthLine::sortableDate((string) $b['date']));
+                $this->months->insertLines($new);
+                $report[] = ['mois' => $month, 'ajoutées' => count($new), 'doublons' => count($lines) - count($new)];
+                $added += count($new);
             }
-            if ($new !== []) {
-                $this->months->save($month, [...$existing, ...$new]);
-            }
-            $report[] = ['mois' => $month, 'ajoutées' => count($new), 'doublons' => count($lines) - count($new)];
-            $added += count($new);
-        }
 
-        return ['ajoutées' => $added, 'mois' => $report];
+            return ['ajoutées' => $added, 'mois' => $report];
+        });
     }
 
     /**
