@@ -1,0 +1,60 @@
+# Exemple de configuration Caddy pour Mes Comptes (à adapter : nom de domaine, chemins, socket PHP-FPM).
+# Copier dans /etc/caddy/Caddyfile, puis : sudo systemctl reload caddy
+#
+# - HTTPS automatique (Let's Encrypt) et redirection HTTP → HTTPS : fournis par Caddy, rien à écrire.
+# - Seul front/dist est servi ; data/, api/src, api/bin, .git… ne sont jamais accessibles.
+# - /api/* est envoyé à PHP-FPM, toujours vers api/index.php.
+
+comptes.example.fr {
+	encode zstd gzip
+
+	header {
+		# CSP : aucun script en ligne ni externe ; « unsafe-inline » pour les styles, nécessaire à Recharts
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+		Strict-Transport-Security "max-age=63072000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Cross-Origin-Opener-Policy "same-origin"
+		Cross-Origin-Resource-Policy "same-origin"
+		-Server
+		-X-Powered-By
+	}
+
+	# Limitation de débit (facultatif) : nécessite le module github.com/mholt/caddy-ratelimit
+	# (xcaddy build --with github.com/mholt/caddy-ratelimit). L'application limite déjà les tentatives de
+	# connexion (5 échecs → 15 min), ceci ajoute une protection contre le flot de requêtes.
+	# rate_limit {
+	# 	zone connexion {
+	# 		match {
+	# 			path /api/connexion*
+	# 		}
+	# 		key {remote_host}
+	# 		events 10
+	# 		window 1m
+	# 	}
+	# 	zone api {
+	# 		key {remote_host}
+	# 		events 300
+	# 		window 1m
+	# 	}
+	# }
+
+	handle /api/* {
+		root * /srv/banque/api
+		php_fastcgi unix//run/php/php8.5-fpm-banque.sock {
+			try_files /index.php
+		}
+	}
+
+	handle {
+		root * /srv/banque/front/dist
+		try_files {path} /index.html
+		file_server
+	}
+
+	log {
+		output file /var/log/caddy/banque-access.log
+	}
+}

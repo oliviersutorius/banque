@@ -1,6 +1,6 @@
 # Mes Comptes
 
-Site personnel, utilisé uniquement en local, pour analyser ses dépenses et revenus à partir des exports CSV du Crédit Agricole.
+Site personnel, utilisé en local ou en ligne (un seul compte, avec double authentification), pour analyser ses dépenses et revenus à partir des exports CSV du Crédit Agricole.
 
 - **Front** : React 18 + Vite + TypeScript, React Router, Recharts (`front/`), polices embarquées (aucune requête externe)
 - **API** : PHP 8.5+ sans framework (`api/`)
@@ -15,7 +15,7 @@ Documentation :
 
 ## Prérequis
 
-- PHP 8.5 ou plus récent, avec l'extension `mbstring`
+- PHP 8.5 ou plus récent, avec les extensions `mbstring` et `sodium` (chiffrement du secret de double authentification)
 - Node.js **24 LTS** et npm (version dans `front/.nvmrc` : `nvm use` dans `front/`)
 
 ## Installation
@@ -25,7 +25,31 @@ cd front
 npm install
 ```
 
+## Premier lancement : créer le compte
+
+Le site exige une connexion. Créer le compte une fois, en ligne de commande. Sur le poste local, le plus simple est
+un compte sans double authentification :
+
+```bash
+php api/bin/compte.php init --sans-totp
+```
+
+Pour un compte avec double authentification (obligatoire en ligne) : générer d'abord une clé de chiffrement, puis
+`init` sans option. Le script affiche la clé à saisir dans l'application d'authentification et 10 codes de secours.
+
+```bash
+php api/bin/cle.php ~/.config/banque-cle          # une seule fois ; ne jamais régénérer ensuite
+BANQUE_CLE_FICHIER=~/.config/banque-cle php api/bin/compte.php init
+```
+
+Autres commandes : `mot-de-passe`, `totp-reset`, `debloquer` (voir [FONCTIONNEL.md](docs/FONCTIONNEL.md#connexion)).
+
 ## Lancement
+
+Avec un compte créé par `--sans-totp`, lancer le serveur avec `BANQUE_TOTP=desactive` : le mot de passe suffit.
+Ce réglage ne fonctionne que sur `localhost` en HTTP depuis la machine elle-même ; il n'a aucun effet en ligne.
+Avec un compte à double authentification, remplacer `BANQUE_TOTP=desactive` par
+`BANQUE_CLE_FICHIER=~/.config/banque-cle` dans les commandes ci-dessous.
 
 ### Utilisation courante
 
@@ -33,7 +57,7 @@ Construire le front une fois (et après chaque mise à jour du code), puis lance
 l'API et le front :
 
 ```bash
-cd front && npm run build && cd .. && php -S localhost:8000 router.php
+cd front && npm run build && cd .. && BANQUE_TOTP=desactive php -S localhost:8000 router.php
 ```
 
 Ouvrir <http://localhost:8000>.
@@ -44,7 +68,7 @@ Dans deux terminaux :
 
 ```bash
 # Terminal 1 : l'API
-php -S localhost:8000 router.php
+BANQUE_TOTP=desactive php -S localhost:8000 router.php
 
 # Terminal 2 : le front avec rechargement à chaud
 cd front && npm run dev
@@ -61,13 +85,22 @@ La variable `BANQUE_DATA_DIR` fait travailler l'API sur un autre dossier que `da
 # Optionnel : partir de ses vraies catégories et règles
 mkdir -p /tmp/banque-essai && cp data/categories.json data/regles.json /tmp/banque-essai/
 
-BANQUE_DATA_DIR=/tmp/banque-essai php -S localhost:8001 router.php
+# Un compte pour cette instance
+BANQUE_DATA_DIR=/tmp/banque-essai php api/bin/compte.php init --sans-totp
+
+BANQUE_DATA_DIR=/tmp/banque-essai BANQUE_TOTP=desactive php -S localhost:8001 router.php
 ```
 
 Ouvrir <http://localhost:8001>. Pour recommencer : arrêter le serveur et supprimer `/tmp/banque-essai`.
 
 Pour un simple aperçu d'un fichier, la page Import suffit : rien n'est enregistré avant « Importer », sauf si l'on
 crée une règle dans la fenêtre d'apprentissage (voir [FONCTIONNEL.md](docs/FONCTIONNEL.md#les-deux-temps-de-limport)).
+
+## Mise en ligne
+
+Sur un VPS, derrière **Caddy** (HTTPS automatique) et **PHP-FPM 8.5**, jamais avec `php -S`. Les fichiers d'exemple
+sont dans `deploy/` (Caddyfile, pool PHP-FPM, rotation des journaux) ; la procédure complète est dans
+[TECHNIQUE.md](docs/TECHNIQUE.md#mise-en-ligne). En ligne, la double authentification est toujours exigée.
 
 ## Utilisation en bref
 
@@ -104,8 +137,10 @@ api/src/           classes PHP (namespace Banque\)
 api/tests/         tests PHP et leur lanceur maison (run.php)
 front/src/         application React (pages/, components/, logique testée dans *.ts)
 front/dist/        front construit (npm run build, non versionné)
-data/              données : mois/, categories.json, regles.json, parametres.json, sauvegardes/ (non versionné)
+data/              données : mois/, categories.json, regles.json, parametres.json, compte.json, tentatives.json,
+                   sauvegardes/, sessions/, journal/ (non versionné)
 docs/              documentation fonctionnelle et technique
+deploy/            exemples de configuration pour la mise en ligne (Caddy, PHP-FPM, logrotate)
 router.php         point d'entrée de « php -S »
 exemple.csv        extrait de relevé servant aux tests (non versionné)
 csv/               relevés réels (non versionné)

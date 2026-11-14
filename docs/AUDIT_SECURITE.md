@@ -5,7 +5,9 @@ npm 10.9.0).
 
 **Suivi** — 11/11/2026 : failles **V1 (CSRF) et V2 (DNS rebinding) corrigées** ; mises à jour de PHP (8.5), Node
 (24 LTS), React 19, Recharts 3 et TypeScript 7 faites ; Dependabot et CI GitHub Actions en place (détail au §2, état au
-§4). Restent : les failles V3 à V9, et les trois paquets de build qui attendent le délai de 14 jours.
+§4). 14/11/2026 : **authentification** en place (V5), V3 et V9 corrigées, configurations Caddy et PHP-FPM fournies pour
+V4, V6 et V8 (`deploy/`), à appliquer et vérifier sur le serveur. Restent : V7 (chiffrement du disque et sauvegardes,
+côté serveur), les vérifications de l'étape 8, et les trois paquets de build qui attendent le délai de 14 jours.
 
 ## Synthèse
 
@@ -28,13 +30,13 @@ Gravité évaluée pour l'usage **actuel** ; la colonne « En ligne » indique l
 |---|---|---|---|---|
 | V1 | CSRF sur les routes `POST` | Moyenne | Critique | ✅ Corrigé le 11/11/2026 |
 | V2 | DNS rebinding : aucun contrôle de l'en-tête `Host` | Moyenne | — (remplacé par V5) | ✅ Corrigé le 11/11/2026 |
-| V3 | Messages d'exception internes renvoyés au client (500) | Faible | Moyenne | À faire |
-| V4 | Aucun en-tête de sécurité HTTP | Faible | Élevée | À faire |
-| V5 | Aucune authentification ni autorisation | Nulle (local) | **Critique** | À faire avant mise en ligne |
-| V6 | Serveur intégré `php -S` | Nulle | **Critique** | À faire avant mise en ligne |
-| V7 | Données bancaires stockées en clair | Faible | Élevée | À faire avant mise en ligne |
-| V8 | Aucune limitation de débit | Nulle | Moyenne | À faire avant mise en ligne |
-| V9 | Permissions des fichiers de données en 0664 | Faible | Moyenne | À faire |
+| V3 | Messages d'exception internes renvoyés au client (500) | Faible | Moyenne | ✅ Corrigé le 14/11/2026 |
+| V4 | Aucun en-tête de sécurité HTTP | Faible | Élevée | 🟡 Configuration prête (`deploy/Caddyfile`), à vérifier en ligne |
+| V5 | Aucune authentification ni autorisation | Nulle (local) | **Critique** | ✅ Corrigé le 14/11/2026 |
+| V6 | Serveur intégré `php -S` | Nulle | **Critique** | 🟡 Configuration prête (Caddy + PHP-FPM, `deploy/`) |
+| V7 | Données bancaires stockées en clair | Faible | Élevée | À faire sur le serveur (disque chiffré, sauvegardes) ; secret TOTP chiffré |
+| V8 | Aucune limitation de débit | Nulle | Moyenne | ✅ Connexion limitée dans l'application ; limite globale facultative (module Caddy) |
+| V9 | Permissions des fichiers de données en 0664 | Faible | Moyenne | ✅ Corrigé le 14/11/2026 |
 
 ### V1 — CSRF sur les routes `POST`
 
@@ -96,6 +98,10 @@ Les messages peuvent contenir des chemins ou des détails internes. `/api/sante`
 **Correctif** : message générique + identifiant d'erreur journalisé (`error_log`), et retirer la version de PHP de
 `/api/sante` (ou la réserver au mode développement). En production : `display_errors=Off`, `expose_php=Off`.
 
+**✅ Corrigé le 14/11/2026** — message générique `Erreur interne (référence xxxxxxxx)` ; le détail est journalisé avec
+la même référence (`[banque xxxxxxxx]` dans le journal d'erreurs de PHP). `/api/sante` ne renvoie plus que
+`{ statut }`. `display_errors=Off` et `X-Powered-By` retiré : `deploy/php-fpm-banque.conf` et `deploy/Caddyfile`.
+
 ### V4 — En-têtes de sécurité absents
 
 Ni `router.php` ni l'API n'envoient : `Content-Security-Policy`, `X-Content-Type-Options: nosniff`,
@@ -115,14 +121,25 @@ Cross-Origin-Opener-Policy: same-origin
 Le script en ligne de `front/index.html` (thème) impose soit un hash CSP, soit son déplacement dans un fichier `.js`
 (plus simple). `style-src 'unsafe-inline'` est nécessaire pour Recharts ; à garder tant qu'il est utilisé.
 
+**🟡 14/11/2026** — tous ces en-têtes sont dans `deploy/Caddyfile` (plus `X-Frame-Options`, `object-src 'none'`,
+`Cross-Origin-Resource-Policy`). Le script de thème a été déplacé dans `front/public/theme-init.js` : la CSP n'a pas
+besoin de hash ni de `'unsafe-inline'` pour les scripts. À vérifier sur le site en ligne (étape 8).
+
 ### V5 — Aucune authentification
 
 Toute l'API est ouverte. C'est voulu en local (documenté dans `TECHNIQUE.md`), mais rédhibitoire en ligne. Voir §3.
+
+**✅ Corrigé le 14/11/2026** — voir §3, étapes 3 et 4, et la section « Authentification » de `TECHNIQUE.md` :
+compte unique créé en ligne de commande, mot de passe Argon2id, double authentification TOTP (secret chiffré avec
+libsodium, codes de secours), session PHP durcie, jeton CSRF, limitation des tentatives, journal des connexions.
+Toutes les routes sauf `/api/session`, `/api/connexion*` et `/api/deconnexion` renvoient 401 sans session.
 
 ### V6 — Serveur intégré PHP
 
 `php -S` est mono-processus, sans TLS, non prévu pour la production (documentation PHP). **Correctif** : Nginx ou
 Caddy + PHP-FPM (voir §3).
+
+**🟡 14/11/2026** — `deploy/Caddyfile` et `deploy/php-fpm-banque.conf` ; `php -S` reste réservé au poste local.
 
 ### V7 — Données en clair
 
@@ -130,16 +147,25 @@ Les fichiers `data/mois/*.json` et `data/sauvegardes/` contiennent l'historique 
 ligne : chiffrement du disque/volume (LUKS ou chiffrement fourni par l'hébergeur), sauvegardes externes chiffrées
 (`restic`, `borg`), et idéalement `data/` hors de la racine web.
 
+**14/11/2026** — le secret TOTP est chiffré (clé hors de `data/`) ; le reste dépend du serveur (étape 7).
+
 ### V8 — Pas de limitation de débit
 
 Sans objet en local. En ligne : limiter la connexion (ex. 5 essais / 15 min / IP + compte) et l'API globale
 (`limit_req` Nginx ou `rate_limit` Caddy). L'import (`/api/import/*`, jusqu'à 20 000 lignes et 10 Mo) est la route la
 plus coûteuse.
 
+**✅ 14/11/2026** — `LoginThrottle` : 5 échecs (mot de passe ou code) → 15 min de verrouillage, puis le double à
+chaque série, par IP et pour le compte. Limite globale de l'API : bloc `rate_limit` commenté dans `deploy/Caddyfile`
+(module `caddy-ratelimit` à ajouter).
+
 ### V9 — Permissions des fichiers
 
 Les dossiers sont créés en `0700` (`Storage::ensureDirectories`), mais les fichiers héritent de l'umask (`0664`
 constaté). **Correctif** : `umask(0077)` au démarrage de l'API, ou `chmod 0600` après écriture dans `JsonFile`.
+
+**✅ Corrigé le 14/11/2026** — `umask(0077)` au démarrage de l'API et des scripts `api/bin/` : fichiers en 0600,
+dossiers en 0700. Pour un `data/` existant : `chmod -R go-rwx data`.
 
 ## 2. Stack technique et montées de version
 
@@ -200,6 +226,8 @@ VPN (Tailscale, WireGuard) ou par un proxy d'identité (Cloudflare Access, Authe
 protection contre la force brute sans écrire de code d'authentification ; il reste à corriger V3, V4 et V9 (V1 et V2 sont
 corrigées).
 
+**✅ Choisi le 14/11/2026** : mono-utilisateur, stockage JSON conservé, authentification dans l'application.
+
 ### Étape 2 — Hébergement et serveur web
 
 - VPS ou hébergement PHP avec PHP-FPM 8.5+, derrière **Caddy** (HTTPS Let's Encrypt automatique) ou Nginx + Certbot.
@@ -211,6 +239,9 @@ corrigées).
 - PHP en production : `display_errors=Off`, `log_errors=On`, `expose_php=Off`, `session.*` durci (voir étape 3),
   `open_basedir` limité au projet, `disable_functions` pour `exec`, `shell_exec`, `system`, `passthru`, `proc_open`,
   `popen`.
+
+**🟡 14/11/2026** — exemples dans `deploy/` (Caddy, pool PHP-FPM confiné, rotation des journaux) et procédure dans
+`TECHNIQUE.md`, « Mise en ligne ».
 
 ### Étape 3 — Authentification
 
@@ -227,6 +258,13 @@ corrigées).
   « mot de passe faux ».
 - Création de compte : désactivée (comptes créés en ligne de commande) si l'usage est personnel.
 
+**✅ Fait le 14/11/2026**, avec ces choix : Argon2id ; sessions PHP natives (cookie `__Host-`, `Secure`, `HttpOnly`,
+`SameSite=Strict`, mode strict) ; expirations 30 min / 12 h ; TOTP sans dépendance (RFC 6238, testé avec les vecteurs
+de la RFC) plutôt que `spomky-labs/otphp` ; 10 codes de secours ; messages identiques pour « compte inconnu » et
+« mot de passe faux » ; création du compte en ligne de commande. La vérification contre les mots de passe compromis
+(Have I Been Pwned) n'est pas faite : le mot de passe est choisi par l'unique utilisateur, en ligne de commande.
+TOTP désactivable **uniquement** sur le poste local (`BANQUE_TOTP=desactive` + hôte local sans HTTPS + client local).
+
 ### Étape 4 — Autorisation et protection des routes
 
 - Un contrôle unique dans `api/index.php`, **avant** `$router->dispatch()` : toute route sauf `POST /api/connexion`
@@ -234,6 +272,9 @@ corrigées).
 - Le front intercepte les 401 (dans `api()` de `front/src/api.ts`) et redirige vers une page de connexion.
 - En multi-utilisateurs : le dossier de données est dérivé de l'utilisateur de la session, jamais d'un paramètre de
   requête.
+
+**✅ Fait le 14/11/2026** — contrôle unique dans `api/index.php` (liste fermée `PUBLIC_ROUTES`) ; le front affiche la
+page de connexion sur tout 401.
 
 ### Étape 5 — Correctifs de l'application (V1 à V4, V9)
 
@@ -243,12 +284,19 @@ corrigées).
 - `umask(0077)` ;
 - tests automatisés pour chacun (requête sans session → 401, mauvais `Content-Type` → 415, mauvaise origine → 403).
 
+**✅ Fait le 14/11/2026** — jeton CSRF (`X-CSRF-Token`), V3, script de thème dans un fichier, `umask(0077)`, tests
+(`AuthTest` : sans session → 401, sans jeton → 403, 6e échec → 429, expiration…). En-têtes : voir V4.
+
 ### Étape 6 — Limitation de débit et journalisation
 
 - Limitation par IP sur la connexion et sur l'API (serveur web) ; verrouillage temporaire après échecs répétés.
 - Journal d'audit : connexions réussies/échouées, imports, suppressions de catégories et de règles (date, IP,
   utilisateur), sans jamais journaliser de mot de passe ni de données bancaires.
 - Rotation des journaux (`logrotate`).
+
+**🟡 14/11/2026** — verrouillage progressif et journal des connexions (`data/journal/connexions.log`) faits ;
+rotation : `deploy/logrotate-banque` ; limite globale par IP : module Caddy facultatif. Le journal des imports et
+suppressions n'est pas fait.
 
 ### Étape 7 — Données et sauvegardes
 
@@ -278,8 +326,8 @@ corrigées).
 | Immédiat | Corriger V1 (CSRF) et V2 (Host), même en local | ~1 h | ✅ Fait le 11/11/2026 (`RequestGuard`, 7 tests) |
 | Immédiat | Mettre à jour `vite`, `@vitejs/plugin-react`, `vitest` | 15 min | ⏳ Versions publiées il y a moins de 14 jours : via Dependabot vers le 25/11/2026 |
 | Avant le 31/12/2026 | PHP 8.2 → 8.5 | 30 min + tests | ✅ Fait le 11/11/2026 (PHP 8.5.12) |
-| Court terme | V3, V9 | 1 h | À faire |
+| Court terme | V3, V9 | 1 h | ✅ Fait le 14/11/2026 |
 | Court terme | Node 22.12 → 24.22.2 LTS | 15 min | ✅ Fait le 11/11/2026 |
-| Avant mise en ligne | Étapes 1 à 8 (ou VPN / proxy d'identité + V3, V4, V9) | 2 à 5 jours selon le modèle choisi | À faire |
+| Avant mise en ligne | Étapes 1 à 8 (ou VPN / proxy d'identité + V3, V4, V9) | 2 à 5 jours selon le modèle choisi | 🟡 Étapes 1, 3, 4, 5 faites le 14/11/2026 (mono-utilisateur, authentification dans l'application) ; 2, 6, 7 : configurations prêtes, à appliquer sur le VPS ; 8 : à faire après déploiement |
 | Moyen terme | React 19, Recharts 3, TypeScript 7 | 1 à 2 jours | ✅ Fait le 11/11/2026 (graphiques vérifiés dans le navigateur) |
 | Automatisation | Dependabot (délai de 14 jours) + CI GitHub Actions (tests, build, `npm audit`) | 1 h | ✅ Fait le 11/11/2026 ; premier passage de la CI à vérifier après le push |

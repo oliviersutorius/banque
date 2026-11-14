@@ -1,0 +1,10 @@
+# Rotation des journaux de Mes Comptes. Copier dans /etc/logrotate.d/banque
+/srv/banque/data/journal/connexions.log /var/log/php-fpm/banque-errors.log {
+	monthly
+	rotate 12
+	compress
+	delaycompress
+	missingok
+	notifempty
+	create 0600 banque banque
+}

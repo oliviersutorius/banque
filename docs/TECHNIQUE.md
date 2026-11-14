@@ -13,9 +13,12 @@ navigateur ──► php -S localhost:8000 router.php
                  └── reste   → front/dist/ (application React construite, repli sur index.html)
 
 développement : Vite (:5173) sert front/src et relaie /api vers :8000
+
+en ligne : navigateur ──HTTPS──► Caddy ──► front/dist/ (fichiers statiques)
+                                     └──► /api/* → PHP-FPM → api/index.php ──► data/
 ```
 
-- **Back** : PHP 8.5+, sans framework ni dépendance Composer. `declare(strict_types=1)`, PSR-12, types sur toutes les
+- **Back** : PHP 8.5+ (extensions `mbstring`, `sodium`), sans framework ni dépendance Composer. `declare(strict_types=1)`, PSR-12, types sur toutes les
   signatures. Chargement automatique des classes par `api/bootstrap.php`.
 - **Front** : React 18, TypeScript strict, React Router 7, Recharts, Vite 8. Polices embarquées via `@fontsource`
   (aucune requête externe).
@@ -386,6 +389,39 @@ passe, ni code, ni donnée bancaire.
   (`.github/dependabot.yml`) propose les mises à jour avec le même délai ; la CI (`.github/workflows/ci.yml`) lance
   les tests, le build et `npm audit --audit-level=high` à chaque push, à chaque PR et chaque lundi.
 
+## Mise en ligne
+
+Exemples de configuration dans `deploy/`, à adapter (nom de domaine, chemins). Ils n'ont pas pu être essayés sur un
+vrai serveur : à vérifier pendant l'installation (`caddy validate`, `php-fpm8.5 -t`).
+
+| Fichier | Rôle |
+|---|---|
+| `deploy/Caddyfile` | HTTPS automatique ; seul `front/dist` est servi ; `/api/*` → PHP-FPM sur `api/index.php` ; en-têtes de sécurité (CSP, HSTS, `nosniff`…) ; limitation de débit facultative (module `caddy-ratelimit`) |
+| `deploy/php-fpm-banque.conf` | Pool dédié (utilisateur `banque`) : `BANQUE_HOTES`, `BANQUE_CLE_FICHIER`, erreurs journalisées et jamais affichées, `open_basedir`, `disable_functions`, tailles d'envoi |
+| `deploy/logrotate-banque` | Rotation mensuelle du journal des connexions et du journal d'erreurs |
+
+Procédure (Debian/Ubuntu, en root ou avec `sudo`) :
+
+1. Serveur : pare-feu (80 et 443 seulement), SSH par clé, mises à jour automatiques, **disque chiffré** si
+   l'hébergeur le permet (voir `AUDIT_SECURITE.md`, étapes 2 et 7).
+2. Paquets : PHP 8.5 FPM avec `mbstring` et `sodium`, Caddy. `qrencode` facultatif (QR code dans le terminal).
+3. Utilisateur et code : `useradd --system --home /srv/banque banque`, copie du dépôt dans `/srv/banque`,
+   `cd front && npm ci && npm run build` (sur le poste, puis copie de `front/dist`, si Node n'est pas sur le serveur).
+   `chown -R banque:banque /srv/banque/data` (le reste peut appartenir à root, en lecture seule).
+4. Clé : `mkdir -p /etc/banque && php /srv/banque/api/bin/cle.php /etc/banque/cle && chown banque:banque /etc/banque/cle`
+   (fichier en 0400, lisible par le seul utilisateur `banque`). La sauvegarder **à part** de `data/`.
+5. Compte : `sudo -u banque BANQUE_CLE_FICHIER=/etc/banque/cle php /srv/banque/api/bin/compte.php init`, puis
+   scanner la clé et ranger les codes de secours.
+6. Configuration : copier `deploy/php-fpm-banque.conf` dans `/etc/php/8.5/fpm/pool.d/banque.conf` et
+   `deploy/Caddyfile` dans `/etc/caddy/Caddyfile` en remplaçant `comptes.example.fr` ; `deploy/logrotate-banque`
+   dans `/etc/logrotate.d/banque`. Recharger PHP-FPM et Caddy.
+7. Vérifications (`AUDIT_SECURITE.md`, étape 8) : `curl https://<domaine>/api/mois` → 401 ; `/data/`, `/api/src/`,
+   `/.git/` → page du front, jamais les fichiers ; SSL Labs (A+ visé) et securityheaders.com ; connexion complète
+   depuis le navigateur ; 6 mauvais mots de passe → 429.
+
+`BANQUE_TOTP` ne doit **pas** être défini sur le serveur ; il serait de toute façon ignoré (requêtes en HTTPS, client
+distant).
+
 ## Tests
 
 | Commande | Contenu |
@@ -410,9 +446,10 @@ Décisions prises pendant la réalisation :
 | Types d'opération | 11 types | + Virement reçu, Remboursement de prêt, Rejet, Régularisation, Avoir |
 | Icônes | catégories 1 et 2 | Catégories 1 seulement (le format de `categories.json` n'en prévoit pas pour les 2) |
 | `PUT /api/categories` | remplacement du fichier | Une action par appel, pour répercuter renommages et suppressions |
-| Routes supplémentaires | — | `/api/sante`, `/api/a-trier`, `/api/categories/usage`, `/api/regles/correspondances`, `/api/regles/tester` |
+| Routes supplémentaires | — | `/api/sante`, `/api/a-trier`, `/api/categories/usage`, `/api/regles/correspondances`, `/api/regles/tester` ; connexion : `/api/session`, `/api/connexion`, `/api/connexion/code`, `/api/deconnexion` |
+| Usage | local uniquement, sans authentification | Local ou en ligne ; un compte unique avec mot de passe et double authentification TOTP (désactivable sur le poste local seulement), créé en ligne de commande |
 | `PATCH` d'une ligne | index | Index + vérification date/libellé (409) ; champ `autres` pour les lignes similaires |
-| `api/index.php` | une centaine de lignes | Environ 300 lignes (gestionnaires de routes inclus) |
+| `api/index.php` | une centaine de lignes | Environ 380 lignes (gestionnaires de routes et connexion inclus) |
 | Polices | Google Fonts implicite | Embarquées (`@fontsource`) |
 | Onglet « À trier » | — | Ajouté, avec badge |
 | Tests PHP | non précisé | Lanceur maison, sans PHPUnit |
