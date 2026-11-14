@@ -1,4 +1,4 @@
-/** Types partagés : format des fichiers JSON de data/ et réponses de l'API. */
+/** Types partagés : réponses de l'API (les données sont en base SQLite côté serveur). */
 
 export type Sens = 'dépense' | 'revenu';
 
@@ -13,6 +13,8 @@ export interface CategorieDepense {
 export type Categorie = CategorieDepense | string;
 
 interface LigneBase {
+  /** Identifiant de l'opération en base */
+  id: number;
   date: string;
   libelle: string;
 }
@@ -21,21 +23,19 @@ export type LigneMois =
   | (LigneBase & { catégorie: CategorieDepense; dépense: string })
   | (LigneBase & { catégorie: string; revenu: string });
 
-/** data/mois/YYYYMM.json */
+/** Les opérations d'un mois, triées par date puis ordre d'arrivée */
 export interface FichierMois {
   mois: string;
   lignes: LigneMois[];
 }
 
-/** Réponse de GET /api/mois/{YYYYMM} : le fichier du mois et, pour chaque ligne, son libellé analysé */
+/** Réponse de GET /api/mois/{YYYYMM} : les lignes du mois et, pour chaque ligne, son libellé analysé */
 export interface MoisApi extends FichierMois {
   analyse: { type_operation: string; marchand: string }[];
 }
 
-/** Un élément de GET /api/a-trier : les lignes « À catégoriser » d'un mois et leur position dans le mois */
-export interface MoisATrier extends MoisApi {
-  index: number[];
-}
+/** Un élément de GET /api/a-trier : les lignes « À catégoriser » d'un mois */
+export type MoisATrier = MoisApi;
 
 /** Réponse de GET /api/annee/{YYYY} : les mois enregistrés de l'année */
 export interface AnneeApi {
@@ -43,14 +43,16 @@ export interface AnneeApi {
   mois: MoisApi[];
 }
 
-/** data/categories.json */
+/** Réponse de GET /api/categories */
 export interface Categories {
   dépenses: { nom: string; icone: string; sous_catégories: string[] }[];
   revenus: { nom: string; icone: string }[];
 }
 
-/** Un élément de data/regles.json */
+/** Un élément de GET /api/regles */
 export interface Regle {
+  /** Identifiant en base (absent pour une règle pas encore enregistrée) */
+  id?: number;
   motif: string;
   type: Sens;
   catégorie1?: string;
@@ -62,7 +64,7 @@ export interface Regle {
   origine: 'initiale' | 'apprise';
 }
 
-export type RegleSaisie = Omit<Regle, 'origine'>;
+export type RegleSaisie = Omit<Regle, 'origine' | 'id'>;
 
 // --- Import ---
 

@@ -22,7 +22,7 @@ export default function RulesPage() {
   const [filtre, setFiltre] = useState<Filtre>('toutes');
   const [recherche, setRecherche] = useState('');
   const [page, setPage] = useState(1);
-  const [edition, setEdition] = useState<{ index: number | null; regle: Regle } | null>(null);
+  const [edition, setEdition] = useState<{ id: number | null; regle: Regle } | null>(null);
   const [suppression, setSuppression] = useState<number | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
@@ -36,7 +36,7 @@ export default function RulesPage() {
   const visibles = useMemo(() => {
     const texte = recherche.trim().toUpperCase();
     return (regles ?? [])
-      .map((r, index) => ({ r, index }))
+      .map((r, position) => ({ r, id: r.id ?? -1 - position }))
       .filter(({ r }) => filtre === 'toutes' || r.origine === filtre)
       .filter(({ r }) => texte === '' || r.motif.toUpperCase().includes(texte) || libelleCategorie(categorieDe(r)).toUpperCase().includes(texte));
   }, [regles, filtre, recherche]);
@@ -54,11 +54,11 @@ export default function RulesPage() {
     origine: 'apprise',
   };
 
-  async function supprimer(index: number) {
-    const r = regles?.[index];
+  async function supprimer(id: number) {
+    const r = regles?.find((regle) => regle.id === id);
     if (!r) return;
     try {
-      await supprimerRegle(index, r.motif);
+      await supprimerRegle(id);
       setMessage(`Règle « ${r.motif} » supprimée`);
     } catch (e) {
       setErreur((e as Error).message);
@@ -78,7 +78,7 @@ export default function RulesPage() {
       <section className="card">
         <header className="section-head">
           <h2>{regles.length} règles</h2>
-          <button type="button" className="btn" onClick={() => setEdition({ index: null, regle: nouvelle })}>
+          <button type="button" className="btn" onClick={() => setEdition({ id: null, regle: nouvelle })}>
             + Règle
           </button>
         </header>
@@ -111,8 +111,8 @@ export default function RulesPage() {
               </tr>
             </thead>
             <tbody>
-              {pagination.elements.map(({ r, index }) => (
-                <tr key={index}>
+              {pagination.elements.map(({ r, id }) => (
+                <tr key={id}>
                   <td className="mono-soft">
                     {r.motif}
                     {r.et?.map((m) => (
@@ -129,10 +129,10 @@ export default function RulesPage() {
                     <span className={'badge ' + r.origine}>{r.origine}</span>
                   </td>
                   <td className="nowrap">
-                    <button type="button" className="icon-btn" title="Modifier" onClick={() => setEdition({ index, regle: r })}>
+                    <button type="button" className="icon-btn" title="Modifier" onClick={() => setEdition({ id, regle: r })}>
                       ✏️
                     </button>
-                    <button type="button" className="icon-btn" title="Supprimer" onClick={() => setSuppression(index)}>
+                    <button type="button" className="icon-btn" title="Supprimer" onClick={() => setSuppression(id)}>
                       🗑️
                     </button>
                   </td>
@@ -151,7 +151,7 @@ export default function RulesPage() {
 
       {edition && (
         <RegleDialog
-          index={edition.index}
+          id={edition.id}
           initiale={edition.regle}
           categories={categories}
           onFermer={() => setEdition(null)}
@@ -163,7 +163,7 @@ export default function RulesPage() {
         />
       )}
       {suppression !== null && (
-        <Modal titre={`Supprimer la règle « ${regles[suppression]?.motif ?? ''} » ?`} valider="Supprimer" danger onValider={() => supprimer(suppression)} onFermer={() => setSuppression(null)}>
+        <Modal titre={`Supprimer la règle « ${regles.find((r) => r.id === suppression)?.motif ?? ''} » ?`} valider="Supprimer" danger onValider={() => supprimer(suppression)} onFermer={() => setSuppression(null)}>
           <p className="muted">Les lignes déjà enregistrées gardent leur catégorie.</p>
         </Modal>
       )}
@@ -224,7 +224,7 @@ function Testeur({ categories }: { categories: Categories }) {
           <dt>Par</dt>
           <dd>
             {resultat.règle
-              ? `la règle n° ${resultat.règle.index + 1} « ${resultat.règle.motif} » (${resultat.règle.origine})`
+              ? `la règle « ${resultat.règle.motif} » (${resultat.règle.origine})`
               : resultat.source === 'type'
                 ? "le type d'opération (aucune règle)"
                 : 'aucune règle'}
@@ -237,14 +237,14 @@ function Testeur({ categories }: { categories: Categories }) {
 
 interface RegleDialogProps {
   /** null : nouvelle règle (apprise) */
-  index: number | null;
+  id: number | null;
   initiale: Regle;
   categories: Categories;
   onFermer: () => void;
   onEnregistre: (message: string) => void;
 }
 
-function RegleDialog({ index, initiale, categories, onFermer, onEnregistre }: RegleDialogProps) {
+function RegleDialog({ id, initiale, categories, onFermer, onEnregistre }: RegleDialogProps) {
   const [motif, setMotif] = useState(initiale.motif);
   const [et, setEt] = useState((initiale.et ?? []).join(', '));
   const [sens, setSens] = useState<Sens>(initiale.type);
@@ -268,11 +268,11 @@ function RegleDialog({ index, initiale, categories, onFermer, onEnregistre }: Re
       a_confirmer: aConfirmer,
     };
     try {
-      if (index === null) {
+      if (id === null) {
         await creerRegle(saisie);
         onEnregistre(`Règle « ${saisie.motif} » créée`);
       } else {
-        await modifierRegle(index, initiale.motif, saisie);
+        await modifierRegle(id, saisie);
         onEnregistre(`Règle « ${saisie.motif} » modifiée`);
       }
     } catch (e) {
@@ -283,7 +283,7 @@ function RegleDialog({ index, initiale, categories, onFermer, onEnregistre }: Re
 
   return (
     <Modal
-      titre={index === null ? 'Nouvelle règle' : `Modifier la règle « ${initiale.motif} »`}
+      titre={id === null ? 'Nouvelle règle' : `Modifier la règle « ${initiale.motif} »`}
       valider="Enregistrer"
       desactive={motif.trim() === '' || envoi}
       erreur={erreur}
@@ -326,7 +326,7 @@ function RegleDialog({ index, initiale, categories, onFermer, onEnregistre }: Re
         <input type="checkbox" checked={aConfirmer} onChange={(e) => setAConfirmer(e.target.checked)} />
         À confirmer à chaque import
       </label>
-      {index !== null && <p className="muted small">Origine conservée : {initiale.origine}.</p>}
+      {id !== null && <p className="muted small">Origine conservée : {initiale.origine}.</p>}
     </Modal>
   );
 }

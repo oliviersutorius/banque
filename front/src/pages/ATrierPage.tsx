@@ -19,7 +19,7 @@ export default function ATrierPage() {
     getCategories().then(setCategories, (e: Error) => setErreur(e.message));
   }, [charger]);
 
-  const lignes: LigneVue[] = useMemo(() => donnees?.flatMap((m) => versLignesVue(m, m.index)) ?? [], [donnees]);
+  const lignes: LigneVue[] = useMemo(() => donnees?.flatMap((m) => versLignesVue(m)) ?? [], [donnees]);
   // Une ligne recatégorisée quitte la liste : on recharge plutôt que de fusionner les mois renvoyés
   const recat = useRecategorisation(lignes, 'parmi les lignes à trier', () => void charger());
 

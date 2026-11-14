@@ -8,7 +8,7 @@
  *   php api/bin/compte.php totp-reset            nouveau secret TOTP et nouveaux codes de secours
  *   php api/bin/compte.php debloquer             lève les verrouillages après trop d'échecs
  *
- * Mêmes variables d'environnement que l'API : BANQUE_DATA_DIR, BANQUE_CLE ou BANQUE_CLE_FICHIER.
+ * Mêmes variables d'environnement que l'API : BANQUE_BASE, BANQUE_CLE ou BANQUE_CLE_FICHIER.
  * Sur le serveur, lancer le script avec l'utilisateur de PHP-FPM (sudo -u www-data …), sinon l'API ne pourra
  * pas lire les fichiers créés.
  */
@@ -18,10 +18,10 @@ declare(strict_types=1);
 require dirname(__DIR__) . '/bootstrap.php';
 
 use Banque\Account;
-use Banque\JsonFile;
+use Banque\Database;
 use Banque\LoginThrottle;
+use Banque\Paths;
 use Banque\SecretBox;
-use Banque\Storage;
 use Banque\Totp;
 
 if (PHP_SAPI !== 'cli') {
@@ -166,14 +166,12 @@ function requireBox(): SecretBox
 
 $command = $argv[1] ?? '';
 $options = array_slice($argv, 2);
-$storage = new Storage(getenv('BANQUE_DATA_DIR') ?: dirname(__DIR__, 2) . '/data');
 
 try {
-    $storage->ensureDirectories();
-    $json = new JsonFile($storage->backupsDir());
+    $db = Database::open(Paths::fromEnvironment(dirname(__DIR__, 2)));
     $withTotp = !in_array('--sans-totp', $options, true);
     $needsBox = in_array($command, ['totp-reset'], true) || ($command === 'init' && $withTotp);
-    $account = new Account($storage->accountFile(), $json, $needsBox ? requireBox() : SecretBox::fromEnvironment());
+    $account = new Account($db, $needsBox ? requireBox() : SecretBox::fromEnvironment());
 
     switch ($command) {
         case 'init':
@@ -201,7 +199,8 @@ try {
                 throw new RuntimeException('Aucun compte : lancer php api/bin/compte.php init');
             }
             $account->changePassword(newPassword());
-            echo "Mot de passe changé. Les sessions ouvertes restent valides jusqu'à leur expiration (12 h au plus).\n";
+            $account->closeSessions();
+            echo "Mot de passe changé. Les sessions ouvertes ont été fermées.\n";
             break;
 
         case 'totp-reset':
@@ -213,12 +212,13 @@ try {
                 exit(0);
             }
             $reset = $account->resetSecondFactor();
+            $account->closeSessions();
             showSecondFactor($reset['secret'], (string) $account->username(), $reset['codes']);
             confirmTotp($reset['secret']);
             break;
 
         case 'debloquer':
-            (new LoginThrottle($storage->attemptsFile(), $json))->reset();
+            (new LoginThrottle($db))->reset();
             echo "Verrouillages levés.\n";
             break;
 

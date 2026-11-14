@@ -11,14 +11,15 @@ use RuntimeException;
  *
  * - base SQLite : base/banque.sqlite (BANQUE_BASE), avec base/sauvegardes/ et base/archives/ à côté ;
  * - journaux : log/ (BANQUE_LOG), dont log/connexions.log ;
- * - ancien dossier data/ (fichiers JSON d'avant la base), lu seulement par la migration.
+ * - ancien dossier data/ (fichiers JSON d'avant la base), lu seulement par la migration. Il n'est pris en compte
+ *   qu'avec l'emplacement par défaut de la base : une base d'essai (BANQUE_BASE) ne dépend pas de data/.
  */
 final class Paths
 {
     public function __construct(
         public readonly string $database,
         public readonly string $logDir,
-        public readonly string $legacyDataDir,
+        public readonly ?string $legacyDataDir,
     ) {
     }
 
@@ -27,10 +28,12 @@ final class Paths
      */
     public static function fromEnvironment(string $root): self
     {
+        $database = getenv('BANQUE_BASE') ?: null;
+
         return new self(
-            getenv('BANQUE_BASE') ?: $root . '/base/banque.sqlite',
+            $database ?? $root . '/base/banque.sqlite',
             getenv('BANQUE_LOG') ?: $root . '/log',
-            $root . '/data',
+            $database === null ? $root . '/data' : null,
         );
     }
 
@@ -64,7 +67,7 @@ final class Paths
      */
     public function migrationPending(): bool
     {
-        return !is_file($this->database) && is_file($this->legacyDataDir . '/categories.json');
+        return $this->legacyDataDir !== null && !is_file($this->database) && is_file($this->legacyDataDir . '/categories.json');
     }
 
     public function ensureDirectories(): void

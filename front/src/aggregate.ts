@@ -7,7 +7,8 @@ import type { Categorie, LigneMois, MoisApi, Sens } from './types';
 /** Une ligne prête à afficher, avec de quoi la retrouver pour la recatégoriser. */
 export interface LigneVue {
   mois: string;
-  index: number;
+  /** Identifiant de l'opération en base */
+  id: number;
   date: string;
   libelle: string;
   sens: Sens;
@@ -32,12 +33,12 @@ export function sensDe(ligne: LigneMois): Sens {
 /**
  * @param positions position de chaque ligne dans son mois, quand `mois.lignes` n'en est qu'une partie (lignes à trier)
  */
-export function versLignesVue(mois: MoisApi, positions?: number[]): LigneVue[] {
+export function versLignesVue(mois: MoisApi): LigneVue[] {
   return mois.lignes.map((l, index) => {
     const sens = sensDe(l);
     return {
       mois: mois.mois,
-      index: positions?.[index] ?? index,
+      id: l.id,
       date: l.date,
       libelle: l.libelle,
       sens,
@@ -95,7 +96,7 @@ const dateTriable = (date: string) => date.slice(6, 10) + date.slice(3, 5) + dat
 
 /** Ordre chronologique ; à date égale, l'ordre d'origine est conservé (tri stable). */
 export function chronologique(lignes: LigneVue[]): LigneVue[] {
-  return [...lignes].sort((a, b) => dateTriable(a.date).localeCompare(dateTriable(b.date)) || a.mois.localeCompare(b.mois) || a.index - b.index);
+  return [...lignes].sort((a, b) => dateTriable(a.date).localeCompare(dateTriable(b.date)) || a.mois.localeCompare(b.mois) || a.id - b.id);
 }
 
 export interface LigneMatrice {

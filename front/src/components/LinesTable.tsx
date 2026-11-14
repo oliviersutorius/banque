@@ -31,7 +31,7 @@ export default function LinesTable({ lignes, categories, onRecategoriser, sousTo
         </thead>
         <tbody>
           {chronologique(lignes).map((l) => (
-            <tr key={`${l.mois}-${l.index}`} className={estACategoriser(l.catégorie) ? 'review' : ''}>
+            <tr key={l.id} className={estACategoriser(l.catégorie) ? 'review' : ''}>
               <td className="nowrap">{l.date}</td>
               <td className="libelle">{l.libelle}</td>
               <td>

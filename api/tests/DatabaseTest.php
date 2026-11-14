@@ -93,6 +93,7 @@ final class DatabaseTest extends TestCase
         $paths->ensureDirectories();
         touch($paths->database);
         $this->assertTrue(!$paths->migrationPending(), 'base créée');
+        $this->assertTrue(!(new Paths($tmp->path . '/autre.sqlite', $tmp->path . '/log', null))->migrationPending(), 'base d\'essai : data/ ignoré');
         $this->assertTrue(is_dir($tmp->path . '/log') && is_dir($tmp->path . '/base/sauvegardes'));
     }
 }

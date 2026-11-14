@@ -15,7 +15,7 @@ interface EnCours {
 /**
  * Recatégorisation d'une ligne enregistrée avec l'apprentissage du §4 :
  * la fenêtre propose une règle, puis la ligne et les lignes similaires choisies sont enregistrées
- * (une écriture par mois concerné).
+ * (un appel par mois concerné, qui renvoie ce mois à jour).
  */
 export function useRecategorisation(lignes: LigneVue[], contexteLot: string, onMisAJour: (mois: MoisApi[]) => void) {
   const [enCours, setEnCours] = useState<EnCours | null>(null);
@@ -29,7 +29,7 @@ export function useRecategorisation(lignes: LigneVue[], contexteLot: string, onM
     setMessage(null);
     setErreur(null);
     const lot = lignes.filter(
-      (l) => l.sens === ligne.sens && !(l.mois === ligne.mois && l.index === ligne.index) && !memeCategorie(l.catégorie, catégorie),
+      (l) => l.sens === ligne.sens && l.id !== ligne.id && !memeCategorie(l.catégorie, catégorie),
     );
     setEnCours({ ligne, catégorie, lot });
   }
@@ -48,8 +48,8 @@ export function useRecategorisation(lignes: LigneVue[], contexteLot: string, onM
     }
     try {
       const resultats: MoisApi[] = [];
-      for (const [mois, [premiere, ...autres]] of parMois) {
-        if (premiere) resultats.push(await recategoriser(mois, premiere, catégorie, autres));
+      for (const [premiere, ...autres] of parMois.values()) {
+        if (premiere) resultats.push(await recategoriser(premiere.id, catégorie, autres.map((l) => l.id)));
       }
       onMisAJour(resultats);
       const total = [...parMois.values()].reduce((s, l) => s + l.length, 0);

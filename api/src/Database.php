@@ -39,6 +39,29 @@ final class Database
         }
     }
 
+    /**
+     * Ouvre la base de l'application : crée les dossiers, applique les migrations du schéma en attente (après une
+     * sauvegarde si la base contient déjà des données) et installe les données par défaut dans une base neuve.
+     *
+     * @throws HttpException 503 si les anciens fichiers JSON de data/ n'ont pas encore été migrés
+     */
+    public static function open(Paths $paths): self
+    {
+        if ($paths->migrationPending()) {
+            throw new HttpException(503, 'Migration nécessaire : les données sont encore dans data/. Lancer php api/bin/migrer-json.php');
+        }
+        $paths->ensureDirectories();
+        $db = new self($paths->database);
+        $db->migrate($paths->schemaDir(), static function () use ($db, $paths): void {
+            if ($db->schemaVersion() > 0) {
+                $db->backup($paths->backupsDir());
+            }
+        });
+        DefaultData::seed($db);
+
+        return $db;
+    }
+
     public function __destruct()
     {
         try {

@@ -5,13 +5,13 @@ import type { MoisApi } from './types';
 const mois: MoisApi = {
   mois: '202601',
   lignes: [
-    { date: '30/01/2026', libelle: 'MTP PUTEAUX', catégorie: { catégorie1: 'À catégoriser', catégorie2: 'Non classé' }, dépense: '25,00' },
-    { date: '12/01/2026', libelle: 'SPOTIFY', catégorie: { catégorie1: 'Abonnements & télécom', catégorie2: 'Streaming & musique' }, dépense: '17,20' },
-    { date: '12/01/2026', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '2,67' },
-    { date: '28/01/2026', libelle: 'FREE MOBILE', catégorie: { catégorie1: 'Abonnements & télécom', catégorie2: 'Téléphone mobile' }, dépense: '0,10' },
-    { date: '05/01/2026', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '0,20' },
-    { date: '30/01/2026', libelle: 'SALAIRE', catégorie: 'Salaire', revenu: '2645,05' },
-    { date: '10/01/2026', libelle: 'MUTUELLE', catégorie: 'Remboursements santé', revenu: '50,00' },
+    { id: 1, date: '30/01/2026', libelle: 'MTP PUTEAUX', catégorie: { catégorie1: 'À catégoriser', catégorie2: 'Non classé' }, dépense: '25,00' },
+    { id: 2, date: '12/01/2026', libelle: 'SPOTIFY', catégorie: { catégorie1: 'Abonnements & télécom', catégorie2: 'Streaming & musique' }, dépense: '17,20' },
+    { id: 3, date: '12/01/2026', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '2,67' },
+    { id: 4, date: '28/01/2026', libelle: 'FREE MOBILE', catégorie: { catégorie1: 'Abonnements & télécom', catégorie2: 'Téléphone mobile' }, dépense: '0,10' },
+    { id: 5, date: '05/01/2026', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '0,20' },
+    { id: 6, date: '30/01/2026', libelle: 'SALAIRE', catégorie: 'Salaire', revenu: '2645,05' },
+    { id: 7, date: '10/01/2026', libelle: 'MUTUELLE', catégorie: 'Remboursements santé', revenu: '50,00' },
   ],
   analyse: [],
 };
@@ -56,7 +56,7 @@ describe('parCategorie2', () => {
 
 describe('chronologique', () => {
   it("trie par date en conservant l'ordre du fichier à date égale", () => {
-    expect(chronologique(lignes).map((l) => l.index)).toEqual([4, 6, 1, 2, 3, 0, 5]);
+    expect(chronologique(lignes).map((l) => l.id)).toEqual([5, 7, 2, 3, 4, 1, 6]);
   });
 });
 
@@ -64,15 +64,15 @@ describe('matrice', () => {
   const juillet: MoisApi = {
     mois: '202507',
     lignes: [
-      { date: '02/07/2025', libelle: 'CNP', catégorie: { catégorie1: 'Banque & assurances', catégorie2: 'Assurance emprunteur' }, dépense: '65,64' },
-      { date: '08/07/2025', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '10,00' },
-      { date: '10/07/2025', libelle: 'MUTUELLE', catégorie: 'Remboursements santé', revenu: '50,00' },
+      { id: 8, date: '02/07/2025', libelle: 'CNP', catégorie: { catégorie1: 'Banque & assurances', catégorie2: 'Assurance emprunteur' }, dépense: '65,64' },
+      { id: 9, date: '08/07/2025', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '10,00' },
+      { id: 10, date: '10/07/2025', libelle: 'MUTUELLE', catégorie: 'Remboursements santé', revenu: '50,00' },
     ],
     analyse: [],
   };
   const aout: MoisApi = {
     mois: '202508',
-    lignes: [{ date: '03/08/2025', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '90,00' }],
+    lignes: [{ id: 11, date: '03/08/2025', libelle: 'AUCHAN', catégorie: { catégorie1: 'Alimentation', catégorie2: 'Courses' }, dépense: '90,00' }],
     analyse: [],
   };
   const lignesAnnee = [...versLignesVue(juillet), ...versLignesVue(aout), ...lignes];
@@ -100,12 +100,12 @@ describe('matrice', () => {
 });
 
 describe('versLignesVue', () => {
-  it("garde la position réelle des lignes dans le mois quand on n'en reçoit qu'une partie", () => {
+  it("garde l'identifiant de chaque opération, même quand on ne reçoit qu'une partie du mois", () => {
     const partiel: MoisApi = { ...mois, lignes: [mois.lignes[0]!, mois.lignes[3]!], analyse: [] };
 
-    expect(versLignesVue(partiel, [0, 3]).map((l) => [l.index, l.libelle])).toEqual([
-      [0, 'MTP PUTEAUX'],
-      [3, 'FREE MOBILE'],
+    expect(versLignesVue(partiel).map((l) => [l.id, l.libelle])).toEqual([
+      [mois.lignes[0]!.id, 'MTP PUTEAUX'],
+      [mois.lignes[3]!.id, 'FREE MOBILE'],
     ]);
   });
 });

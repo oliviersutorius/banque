@@ -84,20 +84,12 @@ export const getMois = (mois: string) => api<MoisApi>(`/mois/${mois}`);
 export const getAnnee = (annee: string) => api<AnneeApi>(`/annee/${annee}`);
 export const getATrier = () => api<MoisATrier[]>('/a-trier');
 
-export interface LigneVisee {
-  index: number;
-  date: string;
-  libelle: string;
-}
-
-/** Recatégorise une ligne et, en une seule écriture, les lignes similaires du même mois. */
-export const recategoriser = (mois: string, ligne: LigneVisee, catégorie: Categorie, autres: LigneVisee[] = []) =>
-  ecriture(
-    api<MoisApi>(`/mois/${mois}/lignes/${ligne.index}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ date: ligne.date, libelle: ligne.libelle, catégorie, autres }),
-    }),
-  );
+/**
+ * Recatégorise une opération et, en une seule écriture, d'autres opérations (lignes similaires).
+ * Renvoie le mois de l'opération, à jour.
+ */
+export const recategoriser = (id: number, catégorie: Categorie, autres: number[] = []) =>
+  ecriture(api<MoisApi>(`/operations/${id}`, { method: 'PATCH', body: JSON.stringify({ catégorie, autres }) }));
 
 export function previewImport(fichier: File): Promise<ApercuImport> {
   const form = new FormData();
@@ -139,18 +131,17 @@ export interface ResultatTest {
   texte: string;
   catégorie: Categorie;
   source: 'règle' | 'type' | 'aucune';
-  règle: (Regle & { index: number }) | null;
+  règle: Regle | null;
 }
 
 export const testerLibelle = (libelle: string, sens: Sens) => post<ResultatTest>('/regles/tester', { libelle, sens });
 
 export const creerRegle = (règle: RegleSaisie) => apprendreRegle(règle, false);
 
-export const modifierRegle = (index: number, motifActuel: string, règle: RegleSaisie) =>
-  api<Regle>(`/regles/${index}`, { method: 'PUT', body: JSON.stringify({ motif_actuel: motifActuel, règle }) });
+export const modifierRegle = (id: number, règle: RegleSaisie) =>
+  api<Regle>(`/regles/${id}`, { method: 'PUT', body: JSON.stringify({ règle }) });
 
-export const supprimerRegle = (index: number, motif: string) =>
-  api<{ supprimée: boolean }>(`/regles/${index}?motif=${encodeURIComponent(motif)}`, { method: 'DELETE' });
+export const supprimerRegle = (id: number) => api<{ supprimée: boolean }>(`/regles/${id}`, { method: 'DELETE' });
 
 // --- Paramètres ---
 
