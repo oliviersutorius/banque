@@ -98,6 +98,7 @@ Les tests qui utilisent `exemple.csv` ou `csv/` (relevés réels, non versionné
 
 ```
 api/index.php      routeur de l'API
+api/bin/           scripts en ligne de commande : compte.php (compte, mot de passe, TOTP), cle.php
 api/bootstrap.php  chargement automatique des classes
 api/src/           classes PHP (namespace Banque\)
 api/tests/         tests PHP et leur lanceur maison (run.php)

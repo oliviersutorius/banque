@@ -6,7 +6,8 @@ appliquées aux données. Pour l'architecture et les formats de fichiers, voir [
 ## Vue d'ensemble
 
 Le site lit les exports CSV du Crédit Agricole, classe chaque opération dans une catégorie et présente les dépenses
-et les revenus par mois et par année. Il fonctionne uniquement en local ; les données restent dans le dossier `data/`.
+et les revenus par mois et par année. Il fonctionne sur le poste local ou en ligne sur un serveur ; dans les deux cas
+les données restent dans le dossier `data/` et l'accès est protégé par une connexion (voir « Connexion »).
 
 | Page | Rôle |
 |---|---|
@@ -17,6 +18,71 @@ et les revenus par mois et par année. Il fonctionne uniquement en local ; les d
 | 🏷️ Catégories | Ajout, renommage, suppression, icônes |
 | 🧩 Règles | Test d'un libellé, liste, création, modification, suppression |
 | ⚙️ Paramètres | Charte graphique |
+
+## Connexion
+
+Le site n'a qu'un seul compte, le vôtre. Il n'y a pas de page d'inscription : le compte se crée sur la machine qui
+héberge le site, en ligne de commande.
+
+### Créer le compte
+
+```bash
+php api/bin/compte.php init
+```
+
+Le script demande un identifiant et un mot de passe (12 caractères minimum, saisis deux fois), puis prépare la
+**double authentification** :
+
+1. Il affiche un QR code (si `qrencode` est installé) ou une clé à saisir à la main. Ajoutez-la dans une application
+   d'authentification sur votre téléphone : Aegis, Google Authenticator, 1Password, FreeOTP…
+2. Il affiche **10 codes de secours**, chacun valable une seule fois, pour se connecter sans le téléphone. Notez-les
+   et rangez-les hors ligne : ils ne seront plus jamais affichés.
+3. Il demande le code affiché par l'application, pour vérifier que tout est bien enregistré.
+
+Sur le poste local, le compte peut être créé sans double authentification (voir ci-dessous) :
+`php api/bin/compte.php init --sans-totp`.
+
+### Se connecter
+
+Le site s'ouvre sur la page de connexion, en deux temps :
+
+1. identifiant et mot de passe ;
+2. le code à 6 chiffres affiché par l'application (il change toutes les 30 secondes et ne sert qu'une fois), ou un
+   code de secours. Après un code de secours, le site indique combien il en reste.
+
+Un même message signale un identifiant ou un mot de passe faux : le site ne révèle pas lequel des deux est en cause.
+Il faut saisir le code dans les 5 minutes qui suivent le mot de passe, sinon tout est à refaire.
+
+### Sur le poste local : mot de passe seul
+
+Sur votre poste, la double authentification peut être retirée en lançant le serveur avec `BANQUE_TOTP=desactive`
+(voir le README) : le mot de passe suffit alors. Ce réglage n'a **aucun effet** sur le site en ligne : il n'est
+appliqué que si le site est ouvert à l'adresse `localhost` (ou `127.0.0.1`), sans HTTPS, depuis la machine elle-même.
+En ligne, le code est toujours demandé, et un compte créé sans double authentification ne peut pas se connecter.
+
+### Trop d'échecs
+
+Après 5 échecs (mot de passe ou code faux), la connexion est bloquée 15 minutes, depuis cette adresse et pour le
+compte. Chaque nouvelle série de 5 échecs double la durée (30 min, 1 h…, au plus 24 h). Une connexion réussie remet
+les compteurs à zéro. Pour lever un blocage tout de suite : `php api/bin/compte.php debloquer`.
+
+### Durée de la connexion et déconnexion
+
+- Vous êtes déconnecté après **30 minutes sans activité**, et dans tous les cas **12 heures** après la connexion.
+- Le bouton « Se déconnecter », en haut de la page, ferme la session tout de suite.
+- Fermer le navigateur ferme aussi la session.
+
+### Changer le mot de passe ou le téléphone
+
+| Situation | Commande |
+|---|---|
+| Changer de mot de passe | `php api/bin/compte.php mot-de-passe` |
+| Nouveau téléphone, téléphone perdu, codes de secours épuisés | `php api/bin/compte.php totp-reset` : nouvelle clé et 10 nouveaux codes de secours ; les anciens ne fonctionnent plus |
+| Ajouter la double authentification à un compte créé avec `--sans-totp` | `php api/bin/compte.php totp-reset` |
+| Connexion bloquée après trop d'échecs | `php api/bin/compte.php debloquer` |
+
+Toutes les connexions, tous les échecs et toutes les déconnexions sont notés, avec la date et l'adresse IP, dans
+`data/journal/connexions.log`.
 
 ## Import d'un relevé
 
@@ -201,6 +267,8 @@ Choix de la charte graphique : **Guimauve** (pastel, par défaut), **Sauge & Lin
 ## Données et sauvegardes
 
 - Un fichier par mois dans `data/mois/` ; catégories, règles et paramètres dans `data/`.
+- Le compte (`data/compte.json`) contient l'empreinte du mot de passe, jamais le mot de passe lui-même ; la clé de la
+  double authentification y est chiffrée.
 - Avant chaque modification d'un fichier, une copie horodatée est faite dans `data/sauvegardes/` (les 20 dernières par
   fichier). Pour revenir en arrière : arrêter le serveur et recopier la sauvegarde voulue à la place du fichier.
 - Pour essayer sans toucher à ses données : lancer une instance d'essai avec `BANQUE_DATA_DIR` (voir le README).

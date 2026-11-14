@@ -334,6 +334,26 @@ Les échecs au mot de passe et au code comptent ensemble : 5 échecs → 15 min 
 - Partout ailleurs, la variable est ignorée et le code est exigé. Si le compte n'a pas de secret TOTP (créé avec
   `--sans-totp`), la connexion est refusée (403) et le refus est journalisé.
 
+### Scripts en ligne de commande (`api/bin/`)
+
+Ils refusent de s'exécuter hors du terminal (404 s'ils sont appelés par le serveur web) et utilisent les mêmes
+variables d'environnement que l'API.
+
+| Script | Rôle |
+|---|---|
+| `php api/bin/cle.php [fichier]` | Génère une clé de chiffrement ; avec un fichier, l'y écrit en 0400 sans jamais remplacer un fichier existant |
+| `php api/bin/compte.php init [--sans-totp]` | Crée (ou remplace, après confirmation) le compte ; affiche le QR code (via `qrencode` s'il est installé), la clé, l'adresse `otpauth://` et les codes de secours, puis vérifie un premier code |
+| `php api/bin/compte.php mot-de-passe` | Change le mot de passe |
+| `php api/bin/compte.php totp-reset` | Nouveau secret et nouveaux codes de secours |
+| `php api/bin/compte.php debloquer` | Vide `tentatives.json` |
+
+Saisie masquée du mot de passe (`stty -echo`) dans un terminal ; lecture simple sinon (scripts, tests). Sur le
+serveur, les lancer avec l'utilisateur de PHP-FPM (`sudo -u www-data …`), sinon l'API ne pourra pas lire les fichiers
+créés (0600).
+
+**Ne jamais régénérer la clé** d'un compte existant : le secret TOTP deviendrait illisible. La clé se sauvegarde
+à part de `data/` (sinon le chiffrement ne protège plus les sauvegardes).
+
 ### Journal des connexions
 
 `data/journal/connexions.log`, une ligne JSON par évènement : `connexion` (avec le facteur : `totp`, `secours` ou
