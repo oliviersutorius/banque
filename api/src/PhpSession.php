@@ -12,7 +12,7 @@ use RuntimeException;
  * - cookie « __Host-banque_session », Secure, HttpOnly, SameSite=Strict, sans durée (supprimé à la fermeture du
  *   navigateur) ; sur le poste local en HTTP, « banque_session » sans Secure (le préfixe __Host- l'exige) ;
  * - mode strict (un identifiant inconnu envoyé par le navigateur est remplacé), cookies uniquement ;
- * - fichiers de session dans data/sessions/ (dossier en 0700) ;
+ * - sessions stockées en base (DatabaseSessionHandler, table « sessions ») ;
  * - la session n'est démarrée que si le navigateur envoie déjà un cookie, ou au moment de la connexion : les
  *   requêtes anonymes ne créent pas de fichier.
  */
@@ -22,7 +22,7 @@ final class PhpSession implements SessionStore
     public const LOCAL_NAME = 'banque_session';
 
     public function __construct(
-        private readonly string $saveDir,
+        private readonly DatabaseSessionHandler $handler,
         private readonly bool $local,
         private readonly int $maxLifetime,
     ) {
@@ -84,7 +84,7 @@ final class PhpSession implements SessionStore
         ini_set('session.use_only_cookies', '1');
         ini_set('session.use_trans_sid', '0');
         ini_set('session.gc_maxlifetime', (string) $this->maxLifetime);
-        session_save_path($this->saveDir);
+        session_set_save_handler($this->handler, true);
         session_name($this->name());
         session_set_cookie_params(['lifetime' => 0] + $this->cookieParams());
         if (!session_start()) {

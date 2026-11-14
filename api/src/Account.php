@@ -8,14 +8,14 @@ use InvalidArgumentException;
 use RuntimeException;
 
 /**
- * Le compte unique de l'application, stocké dans data/compte.json :
+ * Le compte unique de l'application : tables « compte » (ligne id = 1) et « codes_secours ».
  *
  *   identifiant       nom de connexion
  *   mot_de_passe      empreinte Argon2id (password_hash), jamais le mot de passe
- *   totp              secret TOTP chiffré par SecretBox (base64), ou null si la double authentification n'est pas
+ *   totp              secret TOTP chiffré par SecretBox (base64), ou NULL si la double authentification n'est pas
  *                     configurée (poste local)
- *   codes_secours     empreintes SHA-256 des codes de secours restants (chacun ne sert qu'une fois)
  *   dernier_pas_totp  dernier pas TOTP accepté : un même code ne peut pas servir deux fois
+ *   codes_secours     empreintes SHA-256 des codes de secours restants (chacun ne sert qu'une fois)
  */
 final class Account
 {
@@ -32,8 +32,7 @@ final class Account
      * @param array<string, int> $hashOptions options de password_hash (les tests réduisent le coût)
      */
     public function __construct(
-        private readonly string $path,
-        private readonly JsonFile $json,
+        private readonly Database $db,
         private readonly ?SecretBox $box,
         private readonly array $hashOptions = [],
     ) {
@@ -41,7 +40,7 @@ final class Account
 
     public function exists(): bool
     {
-        return is_file($this->path);
+        return $this->row() !== null;
     }
 
     /**
@@ -68,13 +67,18 @@ final class Account
             throw new InvalidArgumentException('Identifiant vide ou trop long');
         }
         self::validatePassword($password);
-        $factor = $withTotp ? $this->newSecondFactor() : ['data' => ['totp' => null, 'codes_secours' => []], 'secret' => null, 'codes' => []];
+        $factor = $withTotp ? $this->newSecondFactor() : ['totp' => null, 'hashes' => [], 'secret' => null, 'codes' => []];
+        $hash = password_hash($password, PASSWORD_ARGON2ID, $this->hashOptions);
 
-        $this->json->write($this->path, [
-            'identifiant' => $username,
-            'mot_de_passe' => password_hash($password, PASSWORD_ARGON2ID, $this->hashOptions),
-            'dernier_pas_totp' => 0,
-        ] + $factor['data']);
+        $this->db->transaction(function () use ($username, $hash, $factor): void {
+            $this->db->run('DELETE FROM compte');
+            $this->db->run('DELETE FROM sessions');
+            $this->db->run(
+                'INSERT INTO compte (id, identifiant, mot_de_passe, totp, dernier_pas_totp) VALUES (1, ?, ?, ?, 0)',
+                [$username, $hash, $factor['totp']],
+            );
+            $this->saveRecoveryHashes($factor['hashes']);
+        });
 
         return ['secret' => $factor['secret'], 'codes' => $factor['codes']];
     }
@@ -82,8 +86,16 @@ final class Account
     public function changePassword(#[\SensitiveParameter] string $password): void
     {
         self::validatePassword($password);
-        $hash = password_hash($password, PASSWORD_ARGON2ID, $this->hashOptions);
-        $this->json->update($this->path, fn (?array $data): array => ['mot_de_passe' => $hash] + $this->requireData($data));
+        $this->requireRow();
+        $this->db->run('UPDATE compte SET mot_de_passe = ? WHERE id = 1', [password_hash($password, PASSWORD_ARGON2ID, $this->hashOptions)]);
+    }
+
+    /**
+     * Ferme toutes les sessions ouvertes (après un changement de mot de passe ou de second facteur).
+     */
+    public function closeSessions(): void
+    {
+        $this->db->run('DELETE FROM sessions');
     }
 
     /**
@@ -93,15 +105,22 @@ final class Account
      */
     public function resetSecondFactor(): array
     {
+        $this->requireRow();
         $factor = $this->newSecondFactor();
-        $this->json->update($this->path, fn (?array $data): array => $factor['data'] + ['dernier_pas_totp' => 0] + $this->requireData($data));
+        $this->db->transaction(function () use ($factor): void {
+            $this->db->run('UPDATE compte SET totp = ?, dernier_pas_totp = 0 WHERE id = 1', [$factor['totp']]);
+            $this->db->run('DELETE FROM codes_secours');
+            $this->saveRecoveryHashes($factor['hashes']);
+        });
 
         return ['secret' => (string) $factor['secret'], 'codes' => $factor['codes']];
     }
 
     public function username(): ?string
     {
-        return $this->exists() ? (string) ($this->json->read($this->path)['identifiant'] ?? '') : null;
+        $row = $this->row();
+
+        return $row === null ? null : (string) $row['identifiant'];
     }
 
     /**
@@ -110,7 +129,7 @@ final class Account
      */
     public function verifyPassword(string $username, #[\SensitiveParameter] string $password): bool
     {
-        $data = $this->exists() ? $this->json->read($this->path) : [];
+        $data = $this->row() ?? [];
         $hash = is_string($data['mot_de_passe'] ?? null) ? $data['mot_de_passe'] : self::DUMMY_HASH;
         $passwordOk = password_verify($password, $hash);
         $usernameOk = is_string($data['identifiant'] ?? null) && hash_equals($data['identifiant'], trim($username));
@@ -126,14 +145,12 @@ final class Account
 
     public function hasTotp(): bool
     {
-        return $this->exists() && is_string($this->json->read($this->path)['totp'] ?? null);
+        return is_string($this->row()['totp'] ?? null);
     }
 
     public function recoveryCodesLeft(): int
     {
-        $codes = $this->exists() ? ($this->json->read($this->path)['codes_secours'] ?? []) : [];
-
-        return is_array($codes) ? count($codes) : 0;
+        return (int) $this->db->value('SELECT count(*) FROM codes_secours');
     }
 
     /**
@@ -144,36 +161,24 @@ final class Account
      */
     public function verifySecondFactor(#[\SensitiveParameter] string $code, int $now): ?string
     {
-        $accepted = null;
-        $this->json->update($this->path, function (?array $data) use ($code, $now, &$accepted): ?array {
-            $data = $this->requireData($data);
+        return $this->db->transaction(function () use ($code, $now): ?string {
+            $data = $this->requireRow();
             if (!is_string($data['totp'] ?? null)) {
                 return null;
             }
-            $step = Totp::verify($this->requireBox()->decrypt($data['totp']), $code, $now, (int) ($data['dernier_pas_totp'] ?? 0));
+            $step = Totp::verify($this->requireBox()->decrypt($data['totp']), $code, $now, (int) $data['dernier_pas_totp']);
             if ($step !== null) {
-                $accepted = 'totp';
-                return ['dernier_pas_totp' => $step] + $data;
+                $this->db->run('UPDATE compte SET dernier_pas_totp = ? WHERE id = 1', [$step]);
+                return 'totp';
             }
+            $used = $this->db->run('DELETE FROM codes_secours WHERE empreinte = ?', [self::hashRecoveryCode($code)])->rowCount();
 
-            $codeHash = self::hashRecoveryCode($code);
-            $remaining = [];
-            foreach (is_array($data['codes_secours'] ?? null) ? $data['codes_secours'] : [] as $stored) {
-                if (is_string($stored) && hash_equals($stored, $codeHash) && $accepted === null) {
-                    $accepted = 'secours';
-                    continue;
-                }
-                $remaining[] = $stored;
-            }
-
-            return $accepted === null ? null : ['codes_secours' => $remaining] + $data;
+            return $used > 0 ? 'secours' : null;
         });
-
-        return $accepted;
     }
 
     /**
-     * @return array{data: array{totp: string, codes_secours: list<string>}, secret: string, codes: list<string>}
+     * @return array{totp: string, hashes: list<string>, secret: string, codes: list<string>}
      */
     private function newSecondFactor(): array
     {
@@ -184,10 +189,8 @@ final class Account
         }
 
         return [
-            'data' => [
-                'totp' => $this->requireBox()->encrypt($secret),
-                'codes_secours' => array_map(self::hashRecoveryCode(...), $codes),
-            ],
+            'totp' => $this->requireBox()->encrypt($secret),
+            'hashes' => array_map(self::hashRecoveryCode(...), $codes),
             'secret' => $secret,
             'codes' => $codes,
         ];
@@ -225,15 +228,28 @@ final class Account
     }
 
     /**
-     * @param array<mixed>|null $data
-     * @return array<mixed>
+     * @param list<string> $hashes
      */
-    private function requireData(?array $data): array
+    private function saveRecoveryHashes(array $hashes): void
     {
-        if ($data === null) {
-            throw new RuntimeException('Aucun compte : lancer php api/bin/compte.php init');
+        foreach ($hashes as $hash) {
+            $this->db->run('INSERT INTO codes_secours (compte_id, empreinte) VALUES (1, ?)', [$hash]);
         }
+    }
 
-        return $data;
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function row(): ?array
+    {
+        return $this->db->one('SELECT identifiant, mot_de_passe, totp, dernier_pas_totp FROM compte WHERE id = 1');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function requireRow(): array
+    {
+        return $this->row() ?? throw new RuntimeException('Aucun compte : lancer php api/bin/compte.php init');
     }
 }

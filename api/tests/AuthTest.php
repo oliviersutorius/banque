@@ -9,7 +9,7 @@ use Banque\AuditLog;
 use Banque\Auth;
 use Banque\AuthConfig;
 use Banque\HttpException;
-use Banque\JsonFile;
+use Banque\Database;
 use Banque\LoginThrottle;
 use Banque\SecretBox;
 use Banque\Totp;
@@ -23,7 +23,7 @@ final class AuthTest extends TestCase
     private const ONLINE = ['HTTP_HOST' => 'comptes.example.fr', 'REMOTE_ADDR' => self::IP, 'HTTPS' => 'on'];
 
     private readonly TempDir $tmp;
-    private readonly JsonFile $json;
+    private readonly Database $db;
     private readonly Account $account;
     private readonly ArraySession $session;
     private string $secret = '';
@@ -33,9 +33,8 @@ final class AuthTest extends TestCase
     public function __construct()
     {
         $this->tmp = new TempDir();
-        mkdir($this->tmp->path . '/sauvegardes');
-        $this->json = new JsonFile($this->tmp->path . '/sauvegardes');
-        $this->account = new Account($this->tmp->path . '/compte.json', $this->json, SecretBox::fromBase64(SecretBox::generateKey()), AccountTest::FAST_HASH);
+        $this->db = self::memoryDatabase();
+        $this->account = new Account($this->db, SecretBox::fromBase64(SecretBox::generateKey()), AccountTest::FAST_HASH);
         $this->session = new ArraySession();
     }
 
@@ -47,7 +46,7 @@ final class AuthTest extends TestCase
         return new Auth(
             $this->session,
             $this->account,
-            new LoginThrottle($this->tmp->path . '/tentatives.json', $this->json),
+            new LoginThrottle($this->db),
             AuthConfig::fromServer($server, $totpVariable),
             new AuditLog($this->tmp->path . '/connexions.log'),
         );

@@ -5,14 +5,12 @@ declare(strict_types=1);
 namespace Banque;
 
 /**
- * Limitation des tentatives de connexion, stockée dans data/tentatives.json.
+ * Limitation des tentatives de connexion (table « tentatives »).
  *
  * Deux compteurs : un par adresse IP (« ip:<adresse> ») et un global pour le compte (« compte »), qui freine aussi
  * une attaque répartie sur beaucoup d'adresses. Tous les $maxFailures échecs, le compteur est verrouillé, d'abord
  * $lockSeconds (15 min), puis le double à chaque nouveau verrouillage, au plus 24 h. Une connexion réussie remet
  * à zéro le compteur de son IP et celui du compte ; un compteur sans échec depuis 24 h est oublié.
- *
- * Format : { "ip:203.0.113.5": { "echecs": 3, "dernier": 1763130000, "jusqu_a": null }, "compte": {...} }
  */
 final class LoginThrottle
 {
@@ -21,8 +19,7 @@ final class LoginThrottle
     private const FORGET_AFTER = 86400;
 
     public function __construct(
-        private readonly string $path,
-        private readonly JsonFile $json,
+        private readonly Database $db,
         private readonly int $maxFailures = 5,
         private readonly int $lockSeconds = 900,
     ) {
@@ -33,14 +30,10 @@ final class LoginThrottle
      */
     public function check(string $ip, int $now): void
     {
-        $data = is_file($this->path) ? $this->json->read($this->path) : [];
-        $until = 0;
-        foreach ([self::ipKey($ip), self::ACCOUNT_KEY] as $key) {
-            $entry = $data[$key] ?? null;
-            if (is_array($entry) && is_int($entry['jusqu_a'] ?? null)) {
-                $until = max($until, $entry['jusqu_a']);
-            }
-        }
+        $until = (int) $this->db->value(
+            'SELECT coalesce(max(jusqu_a), 0) FROM tentatives WHERE cle IN (?, ?)',
+            [self::ipKey($ip), self::ACCOUNT_KEY],
+        );
         if ($until > $now) {
             $minutes = (int) ceil(($until - $now) / 60);
             throw new HttpException(429, sprintf('Trop de tentatives : réessayez dans %d min', $minutes), ['reessayer_dans' => $until - $now]);
@@ -52,35 +45,35 @@ final class LoginThrottle
      */
     public function recordFailure(string $ip, int $now): bool
     {
-        $locked = false;
-        $this->json->update($this->path, function (?array $data) use ($ip, $now, &$locked): array {
-            $data = $this->purge($data ?? [], $now);
+        return $this->db->transaction(function () use ($ip, $now): bool {
+            $this->purge($now);
+            $locked = false;
             foreach ([self::ipKey($ip), self::ACCOUNT_KEY] as $key) {
-                $entry = is_array($data[$key] ?? null) ? $data[$key] : ['echecs' => 0];
+                $entry = $this->db->one('SELECT echecs, jusqu_a FROM tentatives WHERE cle = ?', [$key]);
                 $failures = (int) ($entry['echecs'] ?? 0) + 1;
-                $until = is_int($entry['jusqu_a'] ?? null) ? $entry['jusqu_a'] : null;
+                $until = $entry['jusqu_a'] ?? null;
                 if ($failures % $this->maxFailures === 0) {
                     $lockCount = intdiv($failures, $this->maxFailures);
                     $until = $now + min(self::MAX_LOCK_SECONDS, $this->lockSeconds * 2 ** ($lockCount - 1));
                     $locked = true;
                 }
-                $data[$key] = ['echecs' => $failures, 'dernier' => $now, 'jusqu_a' => $until];
+                $this->db->run(
+                    'INSERT INTO tentatives (cle, echecs, dernier, jusqu_a) VALUES (?, ?, ?, ?)
+                     ON CONFLICT (cle) DO UPDATE SET echecs = excluded.echecs, dernier = excluded.dernier, jusqu_a = excluded.jusqu_a',
+                    [$key, $failures, $now, $until],
+                );
             }
 
-            return $data;
-        }, false);
-
-        return $locked;
+            return $locked;
+        });
     }
 
     public function recordSuccess(string $ip, int $now): void
     {
-        $this->json->update($this->path, function (?array $data) use ($ip, $now): array {
-            $data = $this->purge($data ?? [], $now);
-            unset($data[self::ipKey($ip)], $data[self::ACCOUNT_KEY]);
-
-            return $data;
-        }, false);
+        $this->db->transaction(function () use ($ip, $now): void {
+            $this->purge($now);
+            $this->db->run('DELETE FROM tentatives WHERE cle IN (?, ?)', [self::ipKey($ip), self::ACCOUNT_KEY]);
+        });
     }
 
     /**
@@ -88,7 +81,7 @@ final class LoginThrottle
      */
     public function reset(): void
     {
-        $this->json->write($this->path, [], false);
+        $this->db->run('DELETE FROM tentatives');
     }
 
     private static function ipKey(string $ip): string
@@ -96,16 +89,11 @@ final class LoginThrottle
         return 'ip:' . $ip;
     }
 
-    /**
-     * @param array<mixed> $data
-     * @return array<mixed>
-     */
-    private function purge(array $data, int $now): array
+    private function purge(int $now): void
     {
-        return array_filter(
-            $data,
-            static fn (mixed $entry): bool => is_array($entry)
-                && ((int) ($entry['dernier'] ?? 0) > $now - self::FORGET_AFTER || (int) ($entry['jusqu_a'] ?? 0) > $now),
+        $this->db->run(
+            'DELETE FROM tentatives WHERE dernier <= ? AND coalesce(jusqu_a, 0) <= ?',
+            [$now - self::FORGET_AFTER, $now],
         );
     }
 }

@@ -5,21 +5,17 @@ declare(strict_types=1);
 namespace Banque\Tests;
 
 use Banque\HttpException;
-use Banque\JsonFile;
 use Banque\LoginThrottle;
 
 final class LoginThrottleTest extends TestCase
 {
     private const NOW = 1_700_000_000;
 
-    private readonly TempDir $tmp;
     private readonly LoginThrottle $throttle;
 
     public function __construct()
     {
-        $this->tmp = new TempDir();
-        mkdir($this->tmp->path . '/sauvegardes');
-        $this->throttle = new LoginThrottle($this->tmp->path . '/tentatives.json', new JsonFile($this->tmp->path . '/sauvegardes'));
+        $this->throttle = new LoginThrottle(self::memoryDatabase());
     }
 
     private function assertLocked(string $ip, int $now, string $message = ''): void
@@ -93,6 +89,5 @@ final class LoginThrottleTest extends TestCase
         $this->assertLocked('198.51.100.7', self::NOW + 90001);
         $this->throttle->reset();
         $this->throttle->check('198.51.100.7', self::NOW + 90001);
-        $this->assertSame([], glob($this->tmp->path . '/sauvegardes/*') ?: [], 'pas de sauvegarde pour ce fichier');
     }
 }
