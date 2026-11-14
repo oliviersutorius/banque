@@ -47,27 +47,69 @@ final class JsonFile
 
     /**
      * @param array<mixed> $data
+     * @param bool $backup false pour un fichier technique réécrit souvent (tentatives de connexion)
      */
-    public function write(string $path, array $data): void
+    public function write(string $path, array $data, bool $backup = true): void
     {
-        $json = json_encode($data, self::FLAGS | JSON_THROW_ON_ERROR) . "\n";
+        $this->withLock($path, function () use ($path, $data, $backup): void {
+            $this->writeLocked($path, $data, $backup);
+        });
+    }
 
+    /**
+     * Lecture, modification et écriture sous un même verrou : deux requêtes simultanées ne peuvent pas
+     * partir du même contenu (par exemple réutiliser deux fois le même code de connexion).
+     *
+     * @param callable(array<mixed>|null): (array<mixed>|null) $change reçoit le contenu actuel (null si le fichier
+     *        n'existe pas) et renvoie le nouveau contenu, ou null pour ne rien écrire
+     * @return array<mixed>|null le contenu écrit, ou null si rien n'a été écrit
+     */
+    public function update(string $path, callable $change, bool $backup = true): ?array
+    {
+        return $this->withLock($path, function () use ($path, $change, $backup): ?array {
+            $next = $change(is_file($path) ? $this->read($path) : null);
+            if ($next !== null) {
+                $this->writeLocked($path, $next, $backup);
+            }
+
+            return $next;
+        });
+    }
+
+    /**
+     * @template T
+     * @param callable(): T $fn
+     * @return T
+     */
+    private function withLock(string $path, callable $fn): mixed
+    {
         $lock = fopen($path . '.lock', 'c');
         if ($lock === false || !flock($lock, LOCK_EX)) {
             throw new RuntimeException('Verrouillage impossible : ' . basename($path));
         }
         try {
-            if (is_file($path)) {
-                $this->backup($path);
-            }
-            $tmp = $path . '.' . bin2hex(random_bytes(4)) . '.tmp';
-            if (file_put_contents($tmp, $json) !== strlen($json) || !rename($tmp, $path)) {
-                @unlink($tmp);
-                throw new RuntimeException('Écriture impossible : ' . basename($path));
-            }
+            return $fn();
         } finally {
             flock($lock, LOCK_UN);
             fclose($lock);
+        }
+    }
+
+    /**
+     * @param array<mixed> $data
+     */
+    private function writeLocked(string $path, array $data, bool $backup): void
+    {
+        $json = json_encode($data, self::FLAGS | JSON_THROW_ON_ERROR) . "\n";
+        if ($backup && is_file($path)) {
+            $this->backup($path);
+        }
+        $tmp = $path . '.' . bin2hex(random_bytes(4)) . '.tmp';
+        if (file_put_contents($tmp, $json) !== strlen($json) || !rename($tmp, $path)) {
+            if (is_file($tmp)) {
+                unlink($tmp);
+            }
+            throw new RuntimeException('Écriture impossible : ' . basename($path));
         }
     }
 

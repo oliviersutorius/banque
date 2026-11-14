@@ -72,4 +72,20 @@ final class JsonFileTest extends TestCase
 
         $this->assertThrows(RuntimeException::class, fn () => (new JsonFile($this->dir . '/sauvegardes'))->read($path));
     }
+
+    public function testMiseAJourSousVerrou(): void
+    {
+        $json = new JsonFile($this->dir . '/sauvegardes');
+        $path = $this->dir . '/compteur.json';
+
+        $this->assertSame(['n' => 1], $json->update($path, static fn (?array $data): array => ['n' => ($data['n'] ?? 0) + 1]));
+        $this->assertSame(['n' => 2], $json->update($path, static fn (?array $data): array => ['n' => ($data['n'] ?? 0) + 1]));
+        $this->assertSame(null, $json->update($path, static fn (?array $data): ?array => null), 'null : rien n\'est écrit');
+        $this->assertSame(['n' => 2], $json->read($path));
+        $this->assertSame(1, count(glob($this->dir . '/sauvegardes/compteur-*.json') ?: []), 'une sauvegarde avant la 2e écriture');
+
+        $json->update($path, static fn (?array $data): array => ['n' => 3], false);
+        $json->write($path, ['n' => 4], false);
+        $this->assertSame(1, count(glob($this->dir . '/sauvegardes/compteur-*.json') ?: []), 'sans sauvegarde sur demande');
+    }
 }

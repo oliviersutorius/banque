@@ -76,6 +76,14 @@ final class RequestGuard
     }
 
     /**
+     * Vrai pour localhost, 127.0.0.1 et [::1], quel que soit le port (« localhost:8000 »).
+     */
+    public static function isLocalHost(string $host): bool
+    {
+        return in_array(self::hostname(strtolower($host)), self::LOCAL_HOSTS, true);
+    }
+
+    /**
      * « localhost:8000 » → « localhost », « [::1]:8000 » → « [::1] »
      */
     private static function hostname(string $host): string

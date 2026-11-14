@@ -30,7 +30,7 @@ développement : Vite (:5173) sert front/src et relaie /api vers :8000
 | `RequestGuard` | Avant toute route : hôte autorisé (DNS rebinding), même origine pour les écritures (CSRF), corps en `application/json` |
 | `HttpException`, `CsvFormatException`, `LineConflictException` | Erreurs → statut HTTP (voir « Erreurs ») |
 | `Storage` | Chemins de `data/`, création des dossiers et des fichiers initiaux |
-| `JsonFile` | Lecture, écriture atomique, sauvegardes |
+| `JsonFile` | Lecture, écriture atomique, sauvegardes, mise à jour sous verrou (`update`) |
 | `CsvParser` → `ParseResult`, `ParsedLine`, `RejectedLine` | Lecture du CSV Crédit Agricole |
 | `Amount` | Texte ↔ centimes (`"2 640,31"` → 264031 → `"2640,31"`) |
 | `Text` | Espaces, majuscules sans accents |
@@ -44,6 +44,11 @@ développement : Vite (:5173) sert front/src et relaie /api vers :8000
 | `MonthLine` | Forme JSON d'une ligne, clé de doublon, validation d'une ligne reçue |
 | `MonthRepository` | Fichiers `data/mois/YYYYMM.json` : liste, lecture, écriture triée, recatégorisation |
 | `Importer` | Aperçu et confirmation d'un import, fusion par occurrences |
+| `Account` | Le compte unique (`compte.json`) : création, mot de passe Argon2id, code TOTP ou de secours |
+| `Totp` | Codes TOTP (RFC 6238), base32, adresse `otpauth://` pour le QR code |
+| `SecretBox` | Chiffrement du secret TOTP avec libsodium ; clé lue dans `BANQUE_CLE` ou `BANQUE_CLE_FICHIER` |
+| `LoginThrottle` | Limitation des tentatives de connexion (`tentatives.json`) |
+| `AuthConfig` | Poste local ou non, double authentification exigée ou non (`BANQUE_TOTP`) |
 
 ### Front (`front/src/`)
 
@@ -145,10 +150,52 @@ Priorité : apprise > initiale, puis longueur du motif (somme des longueurs de `
 Valeurs : `guimauve`, `sauge`, `nuit`. Le front garde aussi une copie dans `localStorage` (`mes-comptes-theme`) pour
 appliquer la charte avant le premier affichage ; `parametres.json` reste la référence.
 
+### `compte.json`
+
+Le compte unique de l'application, créé en ligne de commande (`php api/bin/compte.php init`) :
+
+```json
+{
+    "identifiant": "olivier",
+    "mot_de_passe": "$argon2id$v=19$m=65536,t=4,p=1$…",
+    "dernier_pas_totp": 56666666,
+    "totp": "base64(nonce + secret chiffré)",
+    "codes_secours": ["<sha256 du code>", "…"]
+}
+```
+
+- `mot_de_passe` : empreinte `password_hash(PASSWORD_ARGON2ID)`, jamais le mot de passe. Une empreinte créée avec
+  d'anciens paramètres est recalculée à la connexion suivante (`password_needs_rehash`).
+- `totp` : secret TOTP (20 octets) chiffré par `SecretBox` (`sodium_crypto_secretbox`), ou `null` pour un compte du
+  poste local sans double authentification. La clé de chiffrement n'est **jamais** dans `data/` : sans elle, une copie
+  de `data/` ne permet pas de générer les codes.
+- `dernier_pas_totp` : dernier pas de 30 s accepté ; un code déjà utilisé (ou plus ancien) est refusé.
+- `codes_secours` : SHA-256 des codes de secours restants (10 à la création, chacun à usage unique). Les codes sont
+  aléatoires (environ 50 bits) : un hachage lent n'est pas nécessaire.
+- La vérification du second facteur se fait sous verrou (`JsonFile::update`) : deux requêtes simultanées ne peuvent
+  pas utiliser le même code.
+
+### `tentatives.json`
+
+Échecs de connexion, par adresse IP et pour le compte (toutes adresses confondues) :
+
+```json
+{
+    "ip:203.0.113.5": { "echecs": 5, "dernier": 1763130000, "jusqu_a": 1763130900 },
+    "compte": { "echecs": 5, "dernier": 1763130000, "jusqu_a": 1763130900 }
+}
+```
+
+Tous les 5 échecs, le compteur est verrouillé 15 min, puis le double à chaque nouveau verrouillage (au plus 24 h).
+Une connexion réussie remet à zéro le compteur de l'IP et celui du compte. Un compteur sans échec depuis 24 h est
+oublié. Ce fichier est réécrit sans sauvegarde.
+
 ### `sauvegardes/` et fichiers `.lock`
 
 - `JsonFile::write` : verrou exclusif (`flock` sur `<fichier>.lock`), copie de l'ancien fichier dans
   `sauvegardes/<nom>-<YYYYMMDD-HHMMSS-µs>.json`, écriture dans un fichier temporaire puis `rename` (atomique).
+- `JsonFile::update` : lecture, modification et écriture sous le même verrou (rien n'est écrit si la fonction de
+  modification renvoie `null`).
 - 20 sauvegardes conservées par fichier. Les fichiers `.lock` restent sur le disque ; ils sont vides et inoffensifs.
 
 ### Initialisation
@@ -244,7 +291,7 @@ elle reçoit toutes les lignes du CSV et refait la fusion, ce qui la rend rejoua
 
 | Commande | Contenu |
 |---|---|
-| `php api/tests/run.php [filtre]` | Lanceur maison (`api/tests/run.php`, `TestCase.php`) : parseur, normalisation, montants, règles et priorités, catégoriseur, import et doublons par occurrences, apprentissage, mois, catégories, JSON atomique, routeur |
+| `php api/tests/run.php [filtre]` | Lanceur maison (`api/tests/run.php`, `TestCase.php`) : parseur, normalisation, montants, règles et priorités, catégoriseur, import et doublons par occurrences, apprentissage, mois, catégories, JSON atomique, routeur, `RequestGuard` ; authentification : TOTP (vecteurs de la RFC 6238), chiffrement, compte, limitation des tentatives, conditions de la double authentification |
 | `cd front && npm test` | Vitest : formatage, agrégations (totaux, regroupements, matrice), logique d'import |
 
 Les tests qui lisent `exemple.csv` ou `csv/` (non versionnés, données réelles) sont marqués **ignorés** si ces
