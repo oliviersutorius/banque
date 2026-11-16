@@ -16,7 +16,7 @@ export default function YearPage() {
   const [categories, setCategories] = useState<Categories | null>(null);
   const [donnees, setDonnees] = useState<AnneeApi | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
-  const [affichage, setAffichage] = useState<Record<Sens, Affichage>>({ dépense: 'batons', revenu: 'batons' });
+  const [affichage, setAffichage] = useState<Record<Sens, Affichage>>({ dépense: 'tableau', revenu: 'tableau' });
   const [selection, setSelection] = useState<{ sens: Sens; cat1: string } | null>(null);
 
   useEffect(() => {
