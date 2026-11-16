@@ -14,3 +14,6 @@
 /front/node_modules/
 /front/dist/
 *.tsbuildinfo
+
+# Réglages Docker propres au poste (voir README)
+/compose.override.yaml

@@ -46,3 +46,13 @@ jobs:
       - run: npm run build
       - name: Audit des dépendances
         run: npm audit --audit-level=high
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Le build vérifie aussi la présence des extensions PHP (mbstring, sodium, pdo_sqlite)
+      - name: Image
+        run: docker build -t mes-comptes .
+      - name: Tests dans l'image
+        run: docker run --rm mes-comptes php api/tests/run.php

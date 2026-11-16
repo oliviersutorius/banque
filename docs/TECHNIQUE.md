@@ -285,6 +285,28 @@ Sur le poste local, ces variables peuvent être écrites dans **`.env.local`** �
 commentaires `#`, guillemets facultatifs ; seules les variables `BANQUE_*` sont acceptées (sinon erreur 500 avec la
 ligne en cause) ; une variable déjà définie dans le shell est prioritaire. Les scripts `api/bin/` ne le lisent pas.
 
+### Lancement avec Docker (poste local)
+
+`Dockerfile` (deux étapes) : `node:24-alpine` fait `npm ci` et `npm run build`, puis `php:8.5-cli-alpine` reçoit
+`api/`, `router.php` et `front/dist` (le build échoue si `mbstring`, `sodium` ou `pdo_sqlite` manque). La commande est
+`php -S 127.0.0.1:8000 router.php`. `.dockerignore` exclut `base/`, `log/`, `data/`, `csv/`, `.env.local` et
+`.git` : aucune donnée ni aucun secret dans l'image.
+
+`compose.yaml` (`docker compose up --build`) :
+
+- `network_mode: host` : nécessaire pour que `AuthConfig` voie `REMOTE_ADDR` = 127.0.0.1. Avec un réseau Docker
+  ordinaire, le client serait la passerelle (172.17.0.1) : la requête ne serait plus « locale », `BANQUE_TOTP` serait
+  ignoré et le cookie passerait en `__Host-…; Secure`. L'écoute sur 127.0.0.1 garde le site hors du réseau local ;
+- `./base` et `./log` montés sur `/app/base` et `/app/log`, conteneur lancé avec l'UID/GID du poste
+  (`${UID:-1000}:${GID:-1000}`) : droits 0700/0600 conservés ;
+- `.env.local` passé en variables d'environnement (`env_file`, facultatif) ; `EnvFile::load` ne trouve pas de
+  fichier dans l'image et les variables du conteneur s'appliquent comme celles du shell. Le fichier de
+  `BANQUE_CLE_FICHIER` est monté par `compose.override.yaml` (propre au poste, ignoré par git) ;
+- durcissement : système de fichiers en lecture seule (`read_only`, `/tmp` en tmpfs), `cap_drop: ALL`,
+  `no-new-privileges`.
+
+Cette image ne sert pas à la mise en ligne (serveur intégré de PHP, pas de HTTPS) : voir « Mise en ligne ».
+
 ## Migration depuis les fichiers JSON (`data/`)
 
 Jusqu'à novembre 2026, les données étaient dans des fichiers JSON : `data/mois/AAAAMM.json`, `categories.json`,

@@ -1,0 +1,14 @@
+# Rien de personnel ni de construit localement dans l'image : données, secrets, dépendances
+.git
+.github
+nbproject
+base
+log
+data
+csv
+exemple.csv
+.env.local
+compose.override.yaml
+front/node_modules
+front/dist
+*.tsbuildinfo

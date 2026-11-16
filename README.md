@@ -21,6 +21,9 @@ Documentation :
   et `pdo_sqlite` (`sudo apt install php8.5-sqlite3`)
 - Node.js **24 LTS** et npm (version dans `front/.nvmrc` : `nvm use` dans `front/`)
 
+Ou seulement **Docker** (avec Docker Compose), sous Linux : voir [Lancer avec Docker](#lancer-avec-docker). PHP reste
+utile sur le poste pour les scripts `api/bin/`, sinon ils se lancent aussi dans le conteneur.
+
 ## Installation
 
 ```bash
@@ -87,6 +90,56 @@ cd front && npm run build && cd .. && php -S localhost:8000 router.php
 ```
 
 Ouvrir <http://localhost:8000>.
+
+### Lancer avec Docker
+
+L'image construit le front et lance `php -S` avec `router.php`, sans Node ni PHP à installer sur le poste. Une seule
+commande, depuis la racine du projet :
+
+```bash
+docker compose up --build
+```
+
+Ouvrir <http://localhost:8000> ; `Ctrl+C` arrête le serveur. `--build` reconstruit l'image si le code a changé
+(rapide sinon, grâce au cache).
+
+Raccourci **`dcu`** : à ajouter une fois à la fin de `~/.zshrc` (ou `~/.bashrc`), puis ouvrir un nouveau terminal ou
+lancer `source ~/.zshrc` :
+
+```bash
+alias dcu='docker compose up --build'
+```
+
+`dcu` se lance ensuite depuis la racine du projet (là où se trouve `compose.yaml`).
+
+Fonctionnement (`compose.yaml`) :
+
+- **Mêmes données qu'hors Docker** : `base/` et `log/` du projet sont montés dans le conteneur, qui tourne avec
+  l'UID/GID 1000 (`export UID GID` avant la commande si les vôtres sont différents) : les fichiers restent à vous.
+- **`.env.local`** est lu s'il existe (mêmes variables `BANQUE_*`). Les chemins qu'il désigne doivent exister dans le
+  conteneur : pour `BANQUE_CLE_FICHIER`, monter le fichier dans un `compose.override.yaml` (non versionné, lu
+  automatiquement par Docker Compose) ; `BANQUE_BASE` et `BANQUE_LOG` se règlent avec des chemins du conteneur.
+
+  ```yaml
+  services:
+    banque:
+      volumes:
+        - /home/<vous>/.config/banque-cle:/home/<vous>/.config/banque-cle:ro
+  ```
+
+- **Réseau de l'hôte** (`network_mode: host`, donc Linux uniquement) : le serveur écoute sur `127.0.0.1:8000` de la
+  machine, comme `php -S localhost:8000`. Il n'est pas joignable depuis le réseau local, et l'API reconnaît le
+  « poste local » : `BANQUE_TOTP=desactive` fonctionne. Avec des ports publiés (`-p`), les requêtes viendraient de la
+  passerelle Docker et la double authentification serait exigée.
+- Le port 8000 doit être libre : arrêter un `php -S localhost:8000` déjà lancé.
+
+Scripts et tests dans le conteneur (même base, même `.env.local`) :
+
+```bash
+docker compose run --rm banque php api/bin/compte.php mot-de-passe
+docker compose run --rm banque php api/bin/base.php sauvegarder
+docker compose run --rm banque php api/tests/run.php
+```
 
 ### Développement
 
@@ -174,6 +227,8 @@ data/              anciens fichiers JSON, jusqu'à la migration (non versionné)
 docs/              documentation fonctionnelle et technique
 deploy/            exemples de configuration pour la mise en ligne (Caddy, PHP-FPM, logrotate)
 router.php         point d'entrée de « php -S » ; lit .env.local
+Dockerfile         image locale : build du front, puis php -S (voir « Lancer avec Docker »)
+compose.yaml       lancement avec Docker (docker compose up --build, alias dcu)
 .env.local.example modèle de .env.local (variables du poste local, non versionné)
 exemple.csv        extrait de relevé servant aux tests (non versionné)
 csv/               relevés réels (non versionné)

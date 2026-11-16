@@ -1,0 +1,27 @@
+# Mes Comptes sur le poste local : docker compose up --build (alias « dcu », voir README), puis http://localhost:8000
+#
+# - Réseau de l'hôte (Linux) : la requête arrive de 127.0.0.1, l'API reconnaît le « poste local » comme avec php -S
+#   (BANQUE_TOTP=desactive, cookie sans « Secure »). Avec des ports publiés, elle verrait la passerelle Docker.
+# - base/ et log/ du projet sont montés : mêmes données qu'hors Docker. Le conteneur tourne avec l'UID/GID du poste
+#   (UID et GID à exporter s'ils ne valent pas 1000) pour que les fichiers restent à vous.
+# - .env.local (variables BANQUE_*) est lu s'il existe. Les chemins qu'il contient doivent exister dans le conteneur :
+#   monter le fichier de BANQUE_CLE_FICHIER via compose.override.yaml (non versionné, voir README).
+services:
+  banque:
+    build: .
+    image: mes-comptes
+    network_mode: host
+    user: "${UID:-1000}:${GID:-1000}"
+    env_file:
+      - path: .env.local
+        required: false
+    volumes:
+      - ./base:/app/base
+      - ./log:/app/log
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
