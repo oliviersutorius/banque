@@ -97,6 +97,25 @@ describe('matrice', () => {
     expect(m.lignes.map((l) => l.nom)).toEqual(['Remboursements santé']);
     expect(m.total).toBe(5000);
   });
+
+  it('calcule la moyenne sur les mois enregistrés, mois sans montant compris', () => {
+    const m = matrice(lignesAnnee, 'dépense', '2025', enregistres);
+
+    expect(m.nbMois).toBe(3);
+    // 100,00 / 3 = 33,333… ; 65,64 / 3 = 21,88 ; 165,64 / 3 = 55,2133…
+    expect(m.lignes.map((l) => [l.nom, l.moyenne])).toEqual([
+      ['Alimentation', 3333],
+      ['Banque & assurances', 2188],
+    ]);
+    expect(m.moyenne).toBe(5521);
+  });
+
+  it('vaut zéro sans mois enregistré', () => {
+    const m = matrice([], 'dépense', '2025', new Set());
+
+    expect(m.nbMois).toBe(0);
+    expect(m.moyenne).toBe(0);
+  });
 });
 
 describe('versLignesVue', () => {

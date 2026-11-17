@@ -253,8 +253,8 @@ Les règles apprises sont enregistrées dans `regles.json` et appliquées à tou
 ### 5.3 Récapitulatif annuel
 
 - Un sélecteur d'année, les mêmes cartes de synthèse et les mêmes 3 affichages, **calculés sur l'année entière**
-- En vue **Tableau** : une matrice **catégories (lignes) × mois de janvier à décembre (colonnes)**, avec les totaux par ligne et par colonne. Un mois sans fichier affiche « — ».
-- Le même clic sur une catégorie 1 donne le détail par catégorie 2 sur l'année
+- En vue **Tableau** : une matrice **catégories (lignes) × mois de janvier à décembre (colonnes)**, avec les totaux par ligne et par colonne, et à droite du total une colonne **Moyenne** (total ÷ nombre de mois enregistrés dans l'année). Un mois sans fichier affiche « — ».
+- Le même clic sur une catégorie 1 donne le détail par catégorie 2 sur l'année (dans la matrice : nom ou total de la ligne) ; un clic sur une case mois de la matrice limite le détail à ce mois ; la colonne Moyenne n'est pas cliquable
 
 ### 5.4 Gestion des catégories
 

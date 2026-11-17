@@ -17,7 +17,8 @@ export default function YearPage() {
   const [donnees, setDonnees] = useState<AnneeApi | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
   const [affichage, setAffichage] = useState<Record<Sens, Affichage>>({ dépense: 'tableau', revenu: 'tableau' });
-  const [selection, setSelection] = useState<{ sens: Sens; cat1: string } | null>(null);
+  /** `mois` (AAAAMM) limite le détail à un mois ; absent, le détail porte sur l'année */
+  const [selection, setSelection] = useState<{ sens: Sens; cat1: string; mois?: string } | null>(null);
 
   useEffect(() => {
     Promise.all([getMoisDisponibles(), getCategories()]).then(([m, c]) => {
@@ -72,7 +73,8 @@ export default function YearPage() {
   const tableauOuvert = affichage.dépense === 'tableau' || affichage.revenu === 'tableau';
 
   const bloc = (sens: Sens, titre: string) => {
-    const select = (cat1: string) => setSelection((s) => (s?.sens === sens && s.cat1 === cat1 ? null : { sens, cat1 }));
+    const select = (cat1: string, mois?: string) =>
+      setSelection((s) => (s?.sens === sens && s.cat1 === cat1 && s.mois === mois ? null : { sens, cat1, mois }));
     return (
       <CategoryBlock
         titre={titre}
@@ -81,7 +83,7 @@ export default function YearPage() {
         categories={categories}
         affichage={affichage[sens]}
         onAffichage={(a) => setAffichage((v) => ({ ...v, [sens]: a }))}
-        onSelect={select}
+        onSelect={(cat1) => select(cat1)}
         selection={selection?.sens === sens ? selection.cat1 : null}
         tableau={
           <YearMatrix annee={annee} sens={sens} matrice={matrice(lignes, sens, annee, enregistres)} categories={categories} onSelect={select} />
@@ -128,8 +130,9 @@ export default function YearPage() {
           </div>
           {selection && (
             <CategoryDetail
-              key={selection.sens + selection.cat1}
+              key={selection.sens + selection.cat1 + (selection.mois ?? '')}
               cat1={selection.cat1}
+              mois={selection.mois}
               sens={selection.sens}
               lignes={lignes}
               categories={categories}

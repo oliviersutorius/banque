@@ -234,10 +234,13 @@ des catégories. Après le choix, la fenêtre **« Retenir cette correction ? »
   - **Camembert** (anneau) : total au centre, pourcentage et montant au survol, légende cliquable ;
   - **Tableau** :
     - *Mois* : les lignes en ordre chronologique, avec un sous-total par catégorie 1 ;
-    - *Année* : matrice catégories × mois de janvier à décembre, totaux par ligne et par colonne ; « — » pour un mois
+    - *Année* : matrice catégories × mois de janvier à décembre, totaux par ligne et par colonne, puis une colonne
+      **Moyenne** à droite du total (total ÷ nombre de mois importés de l'année, un mois importé sans montant comptant
+      pour zéro) ; « — » pour un mois
       non importé, « · » pour un mois importé sans montant ; les en-têtes de mois mènent à la vue mensuelle.
-- Un clic sur une catégorie 1 (barre, part, sous-total, ligne de la matrice) ouvre son **détail** : répartition par
-  catégorie 2 et liste des lignes, recatégorisables.
+- Un clic sur une catégorie 1 (barre, part, sous-total, nom ou total d'une ligne de la matrice) ouvre son **détail** :
+  répartition par catégorie 2 et liste des lignes, recatégorisables. Dans la matrice *Année*, un clic sur une case
+  mois limite ce détail au mois concerné ; la colonne Moyenne et les cases sans montant ne sont pas cliquables.
 - Chaque catégorie garde toujours la même couleur ; « À catégoriser » est toujours en gris.
 
 ## À trier

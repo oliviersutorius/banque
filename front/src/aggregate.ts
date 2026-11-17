@@ -104,6 +104,8 @@ export interface LigneMatrice {
   /** Montant par mois de janvier à décembre ; null si le mois n'a pas de fichier */
   parMois: (number | null)[];
   total: number;
+  /** Total divisé par le nombre de mois enregistrés de l'année, arrondi au centime */
+  moyenne: number;
 }
 
 export interface Matrice {
@@ -111,6 +113,10 @@ export interface Matrice {
   /** Total de chaque mois ; null si le mois n'a pas de fichier */
   totauxMois: (number | null)[];
   total: number;
+  /** Moyenne mensuelle du total général */
+  moyenne: number;
+  /** Nombre de mois enregistrés (avec fichier) dans l'année */
+  nbMois: number;
 }
 
 /**
@@ -134,11 +140,19 @@ export function matrice(lignes: LigneVue[], sens: Sens, annee: string, moisEnreg
   }
 
   const somme = (valeurs: (number | null)[]) => valeurs.reduce<number>((s, v) => s + (v ?? 0), 0);
+  const nbMois = totauxMois.filter((v) => v !== null).length;
+  const moyenne = (total: number) => (nbMois === 0 ? 0 : Math.round(total / nbMois));
+  const total = somme(totauxMois);
   return {
     lignes: [...parCategorie.entries()]
-      .map(([nom, parMois]) => ({ nom, parMois, total: somme(parMois) }))
+      .map(([nom, parMois]) => {
+        const t = somme(parMois);
+        return { nom, parMois, total: t, moyenne: moyenne(t) };
+      })
       .sort((a, b) => b.total - a.total || a.nom.localeCompare(b.nom, 'fr')),
     totauxMois,
-    total: somme(totauxMois),
+    total,
+    moyenne: moyenne(total),
+    nbMois,
   };
 }

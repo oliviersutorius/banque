@@ -2,11 +2,14 @@ import { parCategorie2, type LigneVue } from '../aggregate';
 import { categorie1, icone } from '../categories';
 import { couleur, couleurSousCategorie } from '../colors';
 import { formatEuros } from '../format';
+import { libelleMois } from '../months';
 import type { Categorie, Categories, Sens } from '../types';
 import LinesTable from './LinesTable';
 
 interface Props {
   cat1: string;
+  /** AAAAMM : limite le détail à ce mois */
+  mois?: string;
   sens: Sens;
   lignes: LigneVue[];
   categories: Categories;
@@ -14,8 +17,9 @@ interface Props {
   onClose: () => void;
 }
 
-/** Détail d'une catégorie 1 : répartition par catégorie 2 et lignes concernées. */
-export default function CategoryDetail({ cat1, sens, lignes, categories, onRecategoriser, onClose }: Props) {
+/** Détail d'une catégorie 1 : répartition par catégorie 2 et lignes concernées (de la période, ou du seul `mois`). */
+export default function CategoryDetail({ cat1, mois, sens, lignes: toutes, categories, onRecategoriser, onClose }: Props) {
+  const lignes = mois ? toutes.filter((l) => l.mois === mois) : toutes;
   const concernees = lignes.filter((l) => l.sens === sens && categorie1(l.catégorie) === cat1);
   const total = concernees.reduce((s, l) => s + l.cents, 0);
   const sousCategories = sens === 'dépense' ? parCategorie2(lignes, cat1) : [];
@@ -26,6 +30,7 @@ export default function CategoryDetail({ cat1, sens, lignes, categories, onRecat
       <header className="section-head">
         <h2>
           {icone(categories, sens, cat1)} {cat1}
+          {mois && <span className="muted"> — {libelleMois(mois)}</span>}
         </h2>
         <span>
           <strong className={sens === 'dépense' ? 'depense' : 'revenu'}>{formatEuros(total)}</strong>

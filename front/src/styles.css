@@ -906,13 +906,24 @@ h3 {
   font-weight: 700;
 }
 
-/* Colonne « Total » fixe à droite */
-.matrix th:last-child,
-.matrix td:last-child {
+/* Colonnes « Total » et « Moyenne » fixes à droite */
+.matrix .col-total,
+.matrix .col-moyenne {
   position: sticky;
-  right: 0;
   z-index: 1;
   background: var(--card);
+}
+
+.matrix .col-moyenne {
+  right: 0;
+  width: 6.5rem;
+  min-width: 6.5rem;
+  max-width: 6.5rem;
+  box-sizing: border-box;
+}
+
+.matrix .col-total {
+  right: 6.5rem;
   box-shadow: -8px 0 8px -8px var(--line);
 }
 
