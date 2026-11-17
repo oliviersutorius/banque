@@ -17,7 +17,7 @@ les données sont dans une base de données (`base/banque.sqlite`) et l'accès e
 | 🧺 À trier | Toutes les lignes encore « À catégoriser » ; le badge du menu en donne le nombre |
 | 📥 Import | Dépôt d'un CSV, aperçu, corrections, puis enregistrement |
 | 🏷️ Catégories | Ajout, renommage, suppression, icônes |
-| 🧩 Règles | Test d'un libellé, liste, création, modification, suppression |
+| 🧩 Règles | Test d'un libellé, liste, création, modification, suppression, mutualisation |
 | ⚙️ Paramètres | Charte graphique |
 
 ## Connexion
@@ -260,6 +260,19 @@ la liste. Le badge du menu est recompté après chaque import, correction, règl
 - Liste filtrable (toutes, apprises, initiales) et recherche par motif ou catégorie.
 - **Créer** (règle apprise), **modifier** (l'origine est conservée) et **supprimer** une règle. Supprimer une règle ne
   change pas les lignes déjà enregistrées.
+- **🧹 Mutualiser** (en-tête de la liste) : ouvre une fenêtre qui propose de réduire le nombre de règles, sans jamais
+  changer la catégorie que les règles donnent aux opérations enregistrées :
+  - **règles en double**, cochées d'office : une autre règle de même origine, même sens, même catégorie, plus générale
+    (« SEPHORA » pour « SEPHORA LATTES », type d'opération identique ou absent), s'applique déjà partout où elle
+    s'applique ;
+  - **regroupements possibles**, à cocher soi-même : plusieurs règles apprises de même catégorie qui commencent par
+    les mêmes mots (« MANGO MNG LYON » et « MANGO.COM BARCELONA » → « MANGO »). Le mot commun peut reconnaître
+    d'autres marchands à l'avenir, d'où le choix laissé. Un regroupement qui changerait la catégorie d'opérations
+    est montré grisé, avec des exemples, et ne peut pas être choisi. Les mots trop génériques (SARL, CHEZ, WEB…) ne
+    forment pas de regroupement.
+
+  **Appliquer** fait une sauvegarde de la base puis supprime et crée les règles choisies. La même analyse se lance en
+  ligne de commande : `php api/bin/regles.php mutualiser`.
 
 ## Paramètres
 

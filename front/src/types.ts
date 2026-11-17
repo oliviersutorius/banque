@@ -66,6 +66,31 @@ export interface Regle {
 
 export type RegleSaisie = Omit<Regle, 'origine' | 'id'>;
 
+/** Réponse de GET /api/regles/mutualisation */
+export interface Mutualisation {
+  règles: number;
+  /** Règles qu'une règle plus générale de même catégorie couvre déjà : suppression sans effet sur les opérations */
+  doublons: { clé: string; règle: Regle; couverte_par: Regle }[];
+  /** Règles qui commencent par les mêmes mots, remplaçables par une règle sur ces mots */
+  regroupements: {
+    clé: string;
+    motif: string;
+    règles: Regle[];
+    nouvelle: Regle;
+    /** Nombre d'opérations dont la catégorie changerait : non applicable si > 0 */
+    impact: number;
+    exemples: { libelle: string; avant: string; après: string }[];
+  }[];
+}
+
+/** Réponse de POST /api/regles/mutualisation */
+export interface ResultatMutualisation {
+  supprimées: number;
+  créées: number;
+  /** Nom du fichier de sauvegarde fait avant les changements */
+  sauvegarde: string | null;
+}
+
 // --- Import ---
 
 export interface LigneApercu {

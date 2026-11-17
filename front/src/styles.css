@@ -432,6 +432,28 @@ h3 {
   margin: 0;
 }
 
+.head-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Fenêtre « Mutualiser les règles » : liste longue, défilement interne */
+.mutualisation {
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+}
+
+.mutualisation h3 {
+  margin: 18px 0 6px;
+  font-size: 1rem;
+}
+
+.mutualisation .check.indisponible {
+  opacity: 0.75;
+}
+
 .actions-bar {
   position: sticky;
   bottom: 16px;
@@ -516,6 +538,42 @@ h3 {
 @media (prefers-reduced-motion: reduce) {
   .appear {
     animation: none;
+  }
+}
+
+/* Traitement en cours : indicateur (composant Spinner) suivi d'un texte */
+.en-cours {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner {
+  display: inline-block;
+  flex: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  visibility: hidden;
+  animation: tourne 0.8s linear infinite;
+}
+
+.spinner.visible {
+  visibility: visible;
+}
+
+@keyframes tourne {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* Rotation lente plutôt qu'aucune : l'indicateur doit rester reconnaissable comme « en cours » */
+  .spinner {
+    animation-duration: 2.4s;
   }
 }
 

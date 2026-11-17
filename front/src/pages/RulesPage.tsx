@@ -1,13 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { creerRegle, getCategories, getRegles, modifierRegle, supprimerRegle, testerLibelle, type ResultatTest } from '../api';
+import {
+  appliquerMutualisation,
+  creerRegle,
+  getCategories,
+  getMutualisation,
+  getRegles,
+  modifierRegle,
+  supprimerRegle,
+  testerLibelle,
+  type ResultatTest,
+} from '../api';
 import { A_CATEGORISER, libelleCategorie, regle as construireRegle } from '../categories';
 import CategoryPicker from '../components/CategoryPicker';
 import CategorySelect from '../components/CategorySelect';
 import Modal from '../components/Modal';
 import Pagination from '../components/Pagination';
+import Spinner from '../components/Spinner';
 import { TYPES_OPERATION } from '../operationTypes';
 import { paginer } from '../pagination';
-import type { Categorie, Categories, Regle, Sens } from '../types';
+import type { Categorie, Categories, Mutualisation, Regle, Sens } from '../types';
 
 type Filtre = 'toutes' | 'apprise' | 'initiale';
 
@@ -24,6 +35,7 @@ export default function RulesPage() {
   const [page, setPage] = useState(1);
   const [edition, setEdition] = useState<{ id: number | null; regle: Regle } | null>(null);
   const [suppression, setSuppression] = useState<number | null>(null);
+  const [mutualisation, setMutualisation] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [erreur, setErreur] = useState<string | null>(null);
 
@@ -78,9 +90,19 @@ export default function RulesPage() {
       <section className="card">
         <header className="section-head">
           <h2>{regles.length} règles</h2>
-          <button type="button" className="btn" onClick={() => setEdition({ id: null, regle: nouvelle })}>
-            + Règle
-          </button>
+          <div className="head-buttons">
+            <button
+              type="button"
+              className="btn ghost"
+              title="Repérer les règles en double et celles qui peuvent être regroupées"
+              onClick={() => setMutualisation(true)}
+            >
+              🧹 Mutualiser
+            </button>
+            <button type="button" className="btn" onClick={() => setEdition({ id: null, regle: nouvelle })}>
+              + Règle
+            </button>
+          </div>
         </header>
         <div className="filters">
           <input className="search" placeholder="Rechercher un motif ou une catégorie" value={recherche} onChange={(e) => {
@@ -162,12 +184,174 @@ export default function RulesPage() {
           }}
         />
       )}
+      {mutualisation && (
+        <MutualisationDialog
+          onFermer={() => setMutualisation(false)}
+          onApplique={async (texte) => {
+            setMutualisation(false);
+            setMessage(texte);
+            await charger();
+          }}
+        />
+      )}
       {suppression !== null && (
         <Modal titre={`Supprimer la règle « ${regles.find((r) => r.id === suppression)?.motif ?? ''} » ?`} valider="Supprimer" danger onValider={() => supprimer(suppression)} onFermer={() => setSuppression(null)}>
           <p className="muted">Les lignes déjà enregistrées gardent leur catégorie.</p>
         </Modal>
       )}
     </div>
+  );
+}
+
+/** Motif d'une règle avec ses mots ET et son type d'opération */
+function DescriptionRegle({ regle }: { regle: Regle }) {
+  return (
+    <>
+      <span className="mono-soft">
+        {regle.motif}
+        {regle.et?.map((m) => ` + ${m}`).join('')}
+      </span>
+      {regle.type_operation && <span className="badge">{TYPES_OPERATION[regle.type_operation] ?? regle.type_operation}</span>}
+    </>
+  );
+}
+
+interface MutualisationDialogProps {
+  onFermer: () => void;
+  onApplique: (message: string) => void;
+}
+
+/**
+ * Propose les règles en double (cochées) et les regroupements possibles (à cocher soi-même) ; un regroupement qui
+ * changerait la catégorie d'opérations est montré mais ne peut pas être choisi.
+ */
+function MutualisationDialog({ onFermer, onApplique }: MutualisationDialogProps) {
+  const [analyse, setAnalyse] = useState<Mutualisation | null>(null);
+  const [choix, setChoix] = useState<Set<string>>(new Set());
+  const [erreur, setErreur] = useState<string | null>(null);
+  const [envoi, setEnvoi] = useState(false);
+
+  useEffect(() => {
+    getMutualisation().then(
+      (a) => {
+        setAnalyse(a);
+        setChoix(new Set(a.doublons.map((d) => d.clé)));
+      },
+      (e: Error) => setErreur(e.message),
+    );
+  }, []);
+
+  function basculer(clé: string, coche: boolean) {
+    setChoix((avant) => {
+      const apres = new Set(avant);
+      if (coche) apres.add(clé);
+      else apres.delete(clé);
+      return apres;
+    });
+  }
+
+  async function appliquer() {
+    setEnvoi(true);
+    setErreur(null);
+    try {
+      const r = await appliquerMutualisation([...choix]);
+      const creees = r.créées > 0 ? `, ${r.créées} créée${r.créées > 1 ? 's' : ''}` : '';
+      onApplique(`${r.supprimées} règle${r.supprimées > 1 ? 's' : ''} supprimée${r.supprimées > 1 ? 's' : ''}${creees} (sauvegarde faite avant)`);
+    } catch (e) {
+      setErreur((e as Error).message);
+      setEnvoi(false);
+    }
+  }
+
+  const vide = analyse !== null && analyse.doublons.length === 0 && analyse.regroupements.length === 0;
+
+  return (
+    <Modal
+      titre="Mutualiser les règles"
+      valider={
+        vide ? undefined : envoi ? (
+          <span className="en-cours" role="status">
+            <Spinner /> Application…
+          </span>
+        ) : (
+          `Appliquer (${choix.size})`
+        )
+      }
+      desactive={choix.size === 0 || envoi}
+      erreur={erreur}
+      onValider={appliquer}
+      onFermer={onFermer}
+    >
+      {analyse === null ? (
+        !erreur && (
+          <p className="muted en-cours" role="status">
+            <Spinner /> Analyse des règles et des opérations…
+          </p>
+        )
+      ) : vide ? (
+        <p className="muted">Rien à mutualiser : aucune règle en double ni regroupement possible.</p>
+      ) : (
+        <div className="mutualisation">
+          <p className="muted small">
+            Seules les modifications qui ne changent la catégorie d'aucune opération enregistrée sont applicables. Une
+            sauvegarde de la base est faite avant.
+          </p>
+          {analyse.doublons.length > 0 && (
+            <>
+              <h3>Règles en double ({analyse.doublons.length})</h3>
+              {analyse.doublons.map((d) => (
+                <label key={d.clé} className="check">
+                  <input type="checkbox" checked={choix.has(d.clé)} onChange={(e) => basculer(d.clé, e.target.checked)} />
+                  <span>
+                    <DescriptionRegle regle={d.règle} /> <span className="muted">couverte par</span> <DescriptionRegle regle={d.couverte_par} />
+                    <br />
+                    <span className="muted small">{libelleCategorie(categorieDe(d.règle))}</span>
+                  </span>
+                </label>
+              ))}
+            </>
+          )}
+          {analyse.regroupements.length > 0 && (
+            <>
+              <h3>Regroupements possibles ({analyse.regroupements.length})</h3>
+              <p className="muted small">À vérifier : le mot commun peut aussi reconnaître d'autres marchands à l'avenir.</p>
+              {analyse.regroupements.map((g) => (
+                <label key={g.clé} className={'check' + (g.impact > 0 ? ' indisponible' : '')}>
+                  <input
+                    type="checkbox"
+                    checked={choix.has(g.clé)}
+                    disabled={g.impact > 0}
+                    onChange={(e) => basculer(g.clé, e.target.checked)}
+                  />
+                  <span>
+                    {g.règles.map((r, i) => (
+                      <span key={r.id ?? i}>
+                        {i > 0 && <span className="muted"> + </span>}
+                        <DescriptionRegle regle={r} />
+                      </span>
+                    ))}{' '}
+                    → <DescriptionRegle regle={g.nouvelle} />
+                    <br />
+                    <span className="muted small">{libelleCategorie(categorieDe(g.nouvelle))}</span>
+                    {g.impact > 0 && (
+                      <span className="small error">
+                        <br />
+                        Changerait {g.impact} opération{g.impact > 1 ? 's' : ''}, par exemple :
+                        {g.exemples.map((ex) => (
+                          <span key={ex.libelle}>
+                            <br />« {ex.libelle} » : {ex.avant} → {ex.après}
+                          </span>
+                        ))}
+                      </span>
+                    )}
+                  </span>
+                </label>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+    </Modal>
   );
 }
 

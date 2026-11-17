@@ -9,10 +9,12 @@ import type {
   LigneAImporter,
   MoisApi,
   MoisATrier,
+  Mutualisation,
   Regle,
   RegleSaisie,
   ResultatApprentissage,
   ResultatImport,
+  ResultatMutualisation,
   Sens,
   Theme,
 } from './types';
@@ -137,6 +139,9 @@ export interface ResultatTest {
 export const testerLibelle = (libelle: string, sens: Sens) => post<ResultatTest>('/regles/tester', { libelle, sens });
 
 export const creerRegle = (règle: RegleSaisie) => apprendreRegle(règle, false);
+
+export const getMutualisation = () => api<Mutualisation>('/regles/mutualisation');
+export const appliquerMutualisation = (clés: string[]) => ecriture(post<ResultatMutualisation>('/regles/mutualisation', { clés }));
 
 export const modifierRegle = (id: number, règle: RegleSaisie) =>
   api<Regle>(`/regles/${id}`, { method: 'PUT', body: JSON.stringify({ règle }) });

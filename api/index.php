@@ -35,6 +35,7 @@ use Banque\PhpSession;
 use Banque\RequestGuard;
 use Banque\Router;
 use Banque\Rule;
+use Banque\RuleConsolidation;
 use Banque\RuleRepository;
 use Banque\SecretBox;
 use Banque\SettingsRepository;
@@ -299,6 +300,20 @@ try {
             'source' => $result->source,
             'règle' => $result->rule?->toArray(),
         ];
+    });
+    // Mutualisation : règles en double et regroupements possibles (sans rien changer), puis application des choix
+    $consolidation = static fn (): RuleConsolidation => new RuleConsolidation($db, $rules, $catalog(), $normalizer, $paths->backupsDir());
+    $router->add('GET', '/api/regles/mutualisation', static fn (): array => $consolidation()->analyse());
+    $router->add('POST', '/api/regles/mutualisation', static function () use ($consolidation): array {
+        $keys = jsonBody()['clés'] ?? null;
+        if (!is_array($keys) || array_filter($keys, 'is_string') !== $keys) {
+            throw new HttpException(400, '« clés » doit être une liste de textes');
+        }
+
+        $result = $consolidation()->apply(array_values($keys));
+
+        // Nom du fichier seulement : le chemin du serveur n'a pas à sortir
+        return ['sauvegarde' => $result['sauvegarde'] === null ? null : basename($result['sauvegarde'])] + $result;
     });
     $router->add('PUT', '/api/regles/{id:\d+}', static function (array $p) use ($rules, $catalog): array {
         $body = jsonBody();

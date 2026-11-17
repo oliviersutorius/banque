@@ -169,7 +169,7 @@ final class Rule
     /**
      * Le motif doit apparaître comme une suite de mots entiers : « BP » trouve « BP », pas « BPCE ».
      */
-    private static function containsWords(string $text, string $motif): bool
+    public static function containsWords(string $text, string $motif): bool
     {
         $pattern = '/(?<![\p{L}\d])' . preg_quote(Text::canonical($motif), '/') . '(?![\p{L}\d])/u';
 

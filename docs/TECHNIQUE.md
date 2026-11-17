@@ -42,6 +42,7 @@ en ligne : navigateur ──HTTPS──► Caddy ──► front/dist/ (fichiers
 | `LabelNormalizer` → `NormalizedLabel` | Type d'opération et détail nettoyé d'un libellé |
 | `Rule`, `RuleRepository` | Une règle (correspondance, priorité, forme JSON de l'API) ; tables `regles` et `regle_mots` |
 | `Categorizer` → `Categorization` | Moteur de règles et repli par type d'opération |
+| `RuleConsolidation` | Mutualisation : règles en double, regroupements par mots communs, simulation sur toutes les opérations (rien n'est appliqué qui change une catégorie) |
 | `CategoryCatalog` | Catégories existantes (validation) |
 | `CategoryRepository` | Table `categories` : arbre, recherche d'une feuille par chemin, ajout, renommage, suppression |
 | `CategoryManager` | Ajout, icône, renommage et suppression avec remplacement (validation, messages) |
@@ -351,6 +352,8 @@ Toutes les réponses sont en JSON. Les erreurs ont la forme `{ "erreur": "messag
 | `POST /api/regles/tester` | `{ libelle, sens }` | `{ type_operation, marchand, texte, catégorie, source, règle (avec id) \| null }` |
 | `PUT /api/regles/{id}` | `{ règle }` | la règle (même identifiant, origine conservée) |
 | `DELETE /api/regles/{id}` | | `{ supprimée }` |
+| `GET /api/regles/mutualisation` | | `{ règles, doublons: [{ clé, règle, couverte_par }], regroupements: [{ clé, motif, règles, nouvelle, impact, exemples }] }` |
+| `POST /api/regles/mutualisation` | `{ clés }` | `{ supprimées, créées, sauvegarde }` (nom du fichier) ; 409 si une clé n'est plus valable ou si l'ensemble changerait des opérations |
 | `GET /api/parametres`, `PUT /api/parametres` | `{ thème }` | les paramètres |
 
 ¹ Seules routes accessibles sans être connecté. Toutes les autres exigent une session connectée (sinon **401**) et,
@@ -443,6 +446,7 @@ variables d'environnement que l'API.
 | `php api/bin/base.php sauvegarder` | Copie de la base dans `base/sauvegardes/` (20 gardées) |
 | `php api/bin/base.php verifier` | Version du schéma, `integrity_check`, `foreign_key_check`, nombre de lignes par table |
 | `php api/bin/base.php optimiser` | `VACUUM` et `ANALYZE` |
+| `php api/bin/regles.php mutualiser [--appliquer [--regroupements]]` | Affiche les règles en double et les regroupements possibles ; `--appliquer` supprime les doublons (après une sauvegarde), `--regroupements` applique aussi les regroupements sans impact |
 | `php api/bin/migrer-json.php` | Migration de l'ancien `data/` (voir « Migration depuis les fichiers JSON ») |
 
 Saisie masquée du mot de passe (`stty -echo`) dans un terminal ; lecture simple sinon (scripts, tests). Sur le
@@ -543,7 +547,7 @@ Décisions prises pendant la réalisation :
 | Stockage | fichiers JSON dans `data/` | Base SQLite `base/banque.sqlite` depuis novembre 2026 (données en hausse) ; journaux dans `log/` ; migration par `api/bin/migrer-json.php` |
 | Désignation des lignes et des règles | index | Identifiants de la base |
 | `PUT /api/categories` | remplacement du fichier | Une action par appel, pour répercuter renommages et suppressions |
-| Routes supplémentaires | — | `/api/sante`, `/api/a-trier`, `/api/categories/usage`, `/api/regles/correspondances`, `/api/regles/tester` ; connexion : `/api/session`, `/api/connexion`, `/api/connexion/code`, `/api/deconnexion` |
+| Routes supplémentaires | — | `/api/sante`, `/api/a-trier`, `/api/categories/usage`, `/api/regles/correspondances`, `/api/regles/tester`, `/api/regles/mutualisation` ; connexion : `/api/session`, `/api/connexion`, `/api/connexion/code`, `/api/deconnexion` |
 | Usage | local uniquement, sans authentification | Local ou en ligne ; un compte unique avec mot de passe et double authentification TOTP (désactivable sur le poste local seulement), créé en ligne de commande |
 | `PATCH` d'une ligne | index | `PATCH /api/operations/{id}` ; champ `autres` (identifiants) pour les lignes similaires |
 | `api/index.php` | une centaine de lignes | Environ 350 lignes (gestionnaires de routes et connexion inclus) |

@@ -4,7 +4,7 @@ interface Props {
   titre: string;
   children: ReactNode;
   /** Libellé du bouton principal ; absent : pas de bouton principal */
-  valider?: string;
+  valider?: ReactNode;
   danger?: boolean;
   desactive?: boolean;
   erreur?: string | null;
